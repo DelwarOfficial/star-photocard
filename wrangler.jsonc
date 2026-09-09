@@ -1,0 +1,50 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "star-news-photocard",
+  "main": "@astrojs/cloudflare/entrypoints/server",
+  "compatibility_date": "2026-09-04",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "binding": "ASSETS", "directory": "./dist" },
+  "observability": { "enabled": true },
+  "ratelimits": [
+    {
+      "name": "ARTICLE_RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 10, "period": 60 }
+    }
+  ],
+  "vars": {
+    "ARTICLE_CACHE_TTL_SECONDS": "300",
+    "IMAGE_CACHE_TTL_SECONDS": "900"
+  },
+  "env": {
+    "staging": {
+      "name": "star-news-photocard-staging",
+      "vars": {
+        "ARTICLE_CACHE_TTL_SECONDS": "300",
+        "IMAGE_CACHE_TTL_SECONDS": "900"
+      },
+      "ratelimits": [
+        {
+          "name": "ARTICLE_RATE_LIMITER",
+          "namespace_id": "1001",
+          "simple": { "limit": 10, "period": 60 }
+        }
+      ]
+    },
+    "production": {
+      "name": "star-news-photocard-production",
+      "vars": {
+        "ARTICLE_CACHE_TTL_SECONDS": "300",
+        "IMAGE_CACHE_TTL_SECONDS": "900"
+      },
+      "ratelimits": [
+        {
+          "name": "ARTICLE_RATE_LIMITER",
+          "namespace_id": "1001",
+          "simple": { "limit": 10, "period": 60 }
+        }
+      ]
+    }
+  }
+}

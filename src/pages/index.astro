@@ -1,0 +1,9 @@
+---
+import PhotocardEditor from '../components/editor/PhotocardEditor';
+import AppLayout from '../layouts/AppLayout.astro';
+---
+<AppLayout title="Star News Photocard Generator" description="Create newsroom photocards from Star News articles.">
+  <main>
+    <PhotocardEditor client:load />
+  </main>
+</AppLayout>

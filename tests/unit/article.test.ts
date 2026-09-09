@@ -1,0 +1,195 @@
+import { describe, expect, it, vi } from 'vitest';
+import {
+  cleanTitle,
+  detectLanguage,
+  extractArticle,
+  extractImageCandidates,
+  getBestSrcsetUrl,
+  normalizeImageUrl,
+} from '../../src/lib/article/extractArticle';
+import { isRtvHost, isStarNewsHost, normalizeArticleUrl, resolveRedirect } from '../../src/lib/article/normalizeArticleUrl';
+import { fetchArticleHtml, fetchImageBytes, verifyImageSignature } from '../../src/lib/security/boundedFetch';
+import { signImageUrl, verifyImageToken } from '../../src/lib/security/imageToken';
+
+describe('Star News URL policy', () => {
+  it.each(['starnews.com.bd', 'www.starnews.com.bd', 'english.starnews.com.bd'])('accepts %s', (host) => {
+    expect(isStarNewsHost(host)).toBe(true);
+  });
+  it.each(['evilstarnews.com.bd', 'starnews.com.bd.evil.test', 'localhost', 'starnews.com.bd.'])(
+    'handles %s',
+    (host) => {
+      // trailing-dot form normalizes to the root host and is accepted; lookalikes are rejected.
+      const normalized = host.toLowerCase().replace(/\.+$/u, '');
+      const expected = normalized === 'starnews.com.bd' || normalized.endsWith('.starnews.com.bd');
+      expect(isStarNewsHost(host)).toBe(expected);
+    },
+  );
+  it('keeps the legacy isRtvHost alias working', () => {
+    expect(isRtvHost('www.starnews.com.bd')).toBe(true);
+    expect(isRtvHost('evil.test')).toBe(false);
+  });
+  it('rejects credentials and HTTP', () => {
+    expect(() => normalizeArticleUrl('https://user@starnews.com.bd/x')).toThrow();
+    expect(() => normalizeArticleUrl('http://starnews.com.bd/x')).toThrow();
+  });
+  it('rejects redirect escapes and downgrades', () => {
+    const current = new URL('https://www.starnews.com.bd/a');
+    expect(() => resolveRedirect(current, 'https://evil.test/x')).toThrow();
+    expect(() => resolveRedirect(current, 'http://www.starnews.com.bd/x')).toThrow();
+    expect(resolveRedirect(current, '/english/x').href).toBe('https://www.starnews.com.bd/english/x');
+  });
+});
+
+describe('article extraction', () => {
+  it('extracts and formats an English article', () => {
+    const result = extractArticle(
+      '<meta property="og:title" content="Headline | Star News"><meta property="article:published_time" content="2026-09-04T00:00:00Z">',
+      new URL('https://www.starnews.com.bd/english/story'),
+    );
+    expect(result.title).toBe('Headline');
+    expect(result.language).toBe('en');
+    expect(result.dateSource).toBe('meta');
+  });
+
+  it('prefers og:title, then twitter, then JSON-LD, then document title', () => {
+    const html = [
+      '<title>Doc Title</title>',
+      '<script type="application/ld+json">{"@type":"NewsArticle","headline":"JSON Headline"}</script>',
+      '<meta name="twitter:title" content="Twitter Title">',
+      '<meta property="og:title" content="OG Title | Star News">',
+    ].join('');
+    expect(extractArticle(html, new URL('https://www.starnews.com.bd/x')).title).toBe('OG Title');
+    expect(cleanTitle('A &amp; B | Star News')).toBe('A & B');
+  });
+
+  it('supports nested and @graph JSON-LD dates', () => {
+    const html = `<meta property="og:title" content="Graph Title"><script type="application/ld+json">{"@graph":[{"@type":"NewsArticle","datePublished":"2026-01-15T10:00:00+06:00"}]}</script>`;
+    const result = extractArticle(html, new URL('https://www.starnews.com.bd/x'));
+    expect(result.dateSource).toBe('json-ld');
+    expect(result.publishedAt).toContain('2026-01-15');
+  });
+
+  it('falls back to now with provenance when date is missing', () => {
+    const now = new Date('2026-09-05T00:00:00Z');
+    const result = extractArticle('<meta property="og:title" content="T">', new URL('https://www.starnews.com.bd/x'), now);
+    expect(result.dateSource).toBe('fallback-now');
+    expect(result.publishedAt).toBeNull();
+    expect(result.formattedDate).toBe('৫ সেপ্টেম্বর ২০২৬');
+  });
+
+  it('detects language from path, locale, then script', () => {
+    expect(detectLanguage('', new URL('https://www.starnews.com.bd/english/x'))).toBe('en');
+    expect(
+      detectLanguage('<meta property="og:locale" content="en_US">', new URL('https://www.starnews.com.bd/x')),
+    ).toBe('en');
+    expect(detectLanguage('সংবাদ শিরোনাম', new URL('https://www.starnews.com.bd/x'))).toBe('bn');
+  });
+
+  it('orders image candidates and deduplicates', () => {
+    const html = [
+      '<meta property="og:image" content="https://www.starnews.com.bd/a.jpg">',
+      '<meta property="og:image:secure_url" content="https://www.starnews.com.bd/secure.jpg">',
+      '<meta property="og:image" content="https://www.starnews.com.bd/a.jpg">',
+      '<link rel="image_src" href="/relative.jpg">',
+    ].join('');
+    const candidates = extractImageCandidates(html, 'https://www.starnews.com.bd/article');
+    expect(candidates[0]).toBe('https://www.starnews.com.bd/secure.jpg');
+    expect(candidates).toContain('https://www.starnews.com.bd/relative.jpg');
+    expect(new Set(candidates).size).toBe(candidates.length);
+  });
+
+  it('rejects non-Star News and non-https image URLs', () => {
+    expect(normalizeImageUrl('https://evil.test/a.jpg', 'https://www.starnews.com.bd/x')).toBe('');
+    expect(normalizeImageUrl('http://www.starnews.com.bd/a.jpg', 'https://www.starnews.com.bd/x')).toBe('');
+    expect(normalizeImageUrl('//www.starnews.com.bd/a.jpg', 'https://www.starnews.com.bd/x')).toBe(
+      'https://www.starnews.com.bd/a.jpg',
+    );
+  });
+
+  it('picks the best srcset URL', () => {
+    expect(getBestSrcsetUrl('a.jpg 400w, b.jpg 800w')).toBe('b.jpg');
+    expect(getBestSrcsetUrl('a.jpg 1x, b.jpg 2x')).toBe('b.jpg');
+  });
+
+  it('recovers JSON-LD images from arrays and nested objects', () => {
+    const html = `<script type="application/ld+json">{"@type":"Article","image":[{"url":"https://www.starnews.com.bd/json.jpg"}]}</script>`;
+    expect(extractImageCandidates(html, 'https://www.starnews.com.bd/x')).toContain(
+      'https://www.starnews.com.bd/json.jpg',
+    );
+  });
+});
+
+describe('bounded fetch', () => {
+  function htmlResponse(body: string, headers: Record<string, string> = {}, status = 200): Response {
+    return new Response(body, { status, headers: { 'content-type': 'text/html', ...headers } });
+  }
+
+  it('rejects redirect escapes', async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 302, headers: { location: 'https://evil.test/' } }));
+    await expect(
+      fetchArticleHtml(new URL('https://www.starnews.com.bd/a'), { fetchImpl: fetchImpl as typeof fetch }),
+    ).rejects.toThrow('REDIRECT_REJECTED');
+  });
+
+  it('detects redirect loops', async () => {
+    const fetchImpl = vi.fn(
+      async () => new Response(null, { status: 302, headers: { location: 'https://www.starnews.com.bd/a' } }),
+    );
+    await expect(
+      fetchArticleHtml(new URL('https://www.starnews.com.bd/a'), { fetchImpl: fetchImpl as typeof fetch }),
+    ).rejects.toThrow('REDIRECT_LOOP');
+  });
+
+  it('enforces streamed byte caps', async () => {
+    const big = 'x'.repeat(100);
+    const fetchImpl = vi.fn(async () => htmlResponse(big));
+    await expect(
+      fetchArticleHtml(new URL('https://www.starnews.com.bd/a'), { maxBytes: 10, fetchImpl: fetchImpl as typeof fetch }),
+    ).rejects.toThrow('RESPONSE_TOO_LARGE');
+  });
+
+  it('rejects bad MIME and status', async () => {
+    const badMime = vi.fn(async () => htmlResponse('hi', { 'content-type': 'application/json' }));
+    await expect(
+      fetchArticleHtml(new URL('https://www.starnews.com.bd/a'), { fetchImpl: badMime as typeof fetch }),
+    ).rejects.toThrow('UNSUPPORTED_CONTENT');
+    const badStatus = vi.fn(async () => htmlResponse('hi', {}, 500));
+    await expect(
+      fetchArticleHtml(new URL('https://www.starnews.com.bd/a'), { fetchImpl: badStatus as typeof fetch }),
+    ).rejects.toThrow('UPSTREAM_ERROR');
+  });
+
+  it('validates image magic bytes, not just MIME', async () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+    expect(verifyImageSignature(png, 'image/png')).toBe('image/png');
+    const fake = new Uint8Array(16).fill(1);
+    expect(verifyImageSignature(fake, 'image/png')).toBeNull();
+    const okFetch = vi.fn(
+      async () =>
+        new Response(png, { status: 200, headers: { 'content-type': 'image/png' } }),
+    );
+    const result = await fetchImageBytes(new URL('https://www.starnews.com.bd/a.png'), {
+      fetchImpl: okFetch as typeof fetch,
+    });
+    expect(result.contentType).toBe('image/png');
+    const badFetch = vi.fn(
+      async () => new Response(fake, { status: 200, headers: { 'content-type': 'image/png' } }),
+    );
+    await expect(
+      fetchImageBytes(new URL('https://www.starnews.com.bd/a.png'), { fetchImpl: badFetch as typeof fetch }),
+    ).rejects.toThrow('UNSUPPORTED_IMAGE');
+  });
+});
+
+describe('image tokens', () => {
+  it('signs, verifies, and rejects tampered tokens', async () => {
+    const secret = 'test-secret-that-is-long-enough-123456';
+    const token = await signImageUrl('https://www.starnews.com.bd/a.jpg', secret, 600);
+    await expect(verifyImageToken(token, secret)).resolves.toMatchObject({
+      url: 'https://www.starnews.com.bd/a.jpg',
+    });
+    await expect(verifyImageToken(`${token}x`, secret)).rejects.toThrow();
+    const expired = await signImageUrl('https://www.starnews.com.bd/a.jpg', secret, -60);
+    await expect(verifyImageToken(expired, secret)).rejects.toThrow('TOKEN_EXPIRED');
+  });
+});
