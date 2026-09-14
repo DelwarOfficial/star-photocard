@@ -2,11 +2,16 @@
 
 ## Status
 
+> 2026-09-14: owner replaced the artwork with four 2160 × 2160 square
+> templates (`01. common-card.png`, `02. Digital-Card.png`,
+> `03. Just-in.png`, `04. Entertainment.png`); the registry entries below
+> predate that swap. Execution prompt: `TEMPLATE_REPOSITION_PROMPT.md`.
+
 Implementation in progress on 2026-09-05. The legacy WordPress plugin was deleted from the repo on 2026-09-05 per owner request; the only rollback copy is `C:\Users\star\AppData\Local\Temp\opencode\legacy-plugin-backup-2026-09-05.zip` (no git history exists).
 
 | Area | Legacy behavior | Astro status | Decision |
 |---|---|---|---|
-| Canvas | Fixed 1080 × 1350 | Implemented (`CARD_WIDTH`/`CARD_HEIGHT`, typed template registry) | Preserve |
+| Canvas | Fixed 1080 × 1350 | Square 1080 × 1080 (`CARD_WIDTH`/`CARD_HEIGHT`) to match the 2160 × 2160 artwork; exporter reads the active template's canvas | Changed with artwork swap |
 | Templates | Three legacy filenames with repeated dots (deleted 2026-09-05) | Stable names in `public/templates/` (`bengali-default.png`, `english-default.png`, `usa-card.png`) are now canonical | Preserve |
 | Fonts | Bundled Bengali/English plus Google Fonts CDN | StarNews brand family in `public/fonts/` — Black 900 + Bold 700 only (4 files, woff2 with woff fallback); verified Bengali cmap coverage; unused weights/obliques and IE-only `.eot` removed | Intentional brand change |
 | State | jQuery and DOM state | Typed `CardState` + explicit `cardReducer` (intrinsic pixels, `isDirty`, per-layer reset) | Replace |
@@ -22,7 +27,7 @@ Implementation in progress on 2026-09-05. The legacy WordPress plugin was delete
 | DNS/IP | N/A (WordPress egress) | Workers `fetch` has no portable connected-IP/DNS pinning. Enforced exact `starnews.com.bd` allowlist at every hop; documented residual DNS-rebinding limitation. Stronger egress needs a separate proxy | Documented limitation, not claimed |
 | Rate limiting | Nonce only (not rate limiting) | `ARTICLE_RATE_LIMITER` binding before upstream work + optional WAF; treated as abuse protection, not exact accounting | Fix, not reproduce |
 | Dragging | Unbounded mouse/touch, no keyboard | Pointer Events + capture, viewport→intrinsic scaling, bounds, Arrow/Shift+Arrow nudging with announced coordinates, per-layer reset | Replace with accessible controls |
-| Export | html2canvas clone, `toDataURL`, `rtv-card-<ts>.png` | `CardRenderer` interface (html2canvas impl), `document.fonts.ready` + decoded assets, immutable snapshot, `canvas.toBlob()` PNG exactly 1080×1350, `finally` cleanup, `star-news-photocard-YYYYMMDD-HHmmss.png`, clipboard with secure-context fallback to download | Preserve output contract, harden |
+| Export | html2canvas clone, `toDataURL`, `rtv-card-<ts>.png` | `CardRenderer` interface (html2canvas impl), `document.fonts.ready` + decoded assets, immutable snapshot, `canvas.toBlob()` PNG exactly matching the template canvas (1080×1080), `finally` cleanup, `star-news-photocard-YYYYMMDD-HHmmss.png`, clipboard with secure-context fallback to download | Preserve output contract, harden |
 | Copy | `ClipboardItem`, HTTPS alert | Explicit secure-context/browser handling; Download always available; blob preserved for immediate download on copy failure | Fix, not reproduce |
 | Local images | `accept="image/*"`, type check only | MIME allowlist (JPEG/PNG/GIF/WebP) + 8 MB cap, object-URL lifecycle (replace/reset/unmount), animated GIF exports first frame (documented) | Fix validation gap |
 | Status | Auto-fading message | Persistent `role="status"`/`aria-live="polite"` until superseded; actionable errors; loading/cancel + stale-response protection | Fix |

@@ -51,7 +51,7 @@ export function clampPhotoOffset(
   };
 }
 
-/** Keep a box fully inside the 1080x1350 canvas. */
+/** Keep a box fully inside the 1080x1080 canvas. */
 export function clampToCanvas(position: Point, size: Readonly<{ width: number; height: number }>): Point {
   return {
     x: Math.min(CARD_WIDTH - size.width, Math.max(0, position.x)),

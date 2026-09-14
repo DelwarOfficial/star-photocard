@@ -41,7 +41,7 @@ test.describe('photocard generator', () => {
       await page.setViewportSize({ width, height: 900 });
       await page.goto('/');
       await expect(page.getByRole('heading', { name: 'Photocard Generator' })).toBeVisible();
-      await expect(page.getByText('1080 × 1350 PNG').first()).toBeVisible();
+      await expect(page.getByText('1080 × 1080 PNG').first()).toBeVisible();
     }
   });
 });

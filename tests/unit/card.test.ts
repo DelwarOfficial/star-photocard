@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CARD_HEIGHT, CARD_WIDTH, templates } from '../../src/config/templates';
 import { coverGeometry, clampPhotoOffset, clampToCanvas, previewScale } from '../../src/lib/card/geometry';
 import { titleFontSize, tokenizeTitle } from '../../src/lib/card/highlightTitle';
 import { normalizePhotoTag, countCodePoints } from '../../src/lib/card/photoTag';
@@ -43,7 +44,7 @@ describe('card geometry', () => {
     expect(redrawn.x + redrawn.width).toBeGreaterThanOrEqual(viewport.x + viewport.width - 1e-6);
   });
   it('keeps title and QR inside the canvas', () => {
-    expect(clampToCanvas({ x: -50, y: 1400 }, { width: 1040, height: 120 })).toEqual({ x: 0, y: 1230 });
+    expect(clampToCanvas({ x: -50, y: 1400 }, { width: 1040, height: 120 })).toEqual({ x: 0, y: 960 });
     expect(clampToCanvas({ x: 2000, y: -20 }, { width: 134, height: 134 })).toEqual({ x: 946, y: 0 });
   });
   it('caps preview scale at one', () => {
@@ -116,6 +117,22 @@ describe('dates', () => {
   });
 });
 
+describe('template registry', () => {
+  it('ships four square templates with layers inside the canvas', () => {
+    expect(CARD_WIDTH).toBe(1080);
+    expect(CARD_HEIGHT).toBe(1080);
+    expect(templates.map((t) => t.id)).toEqual(['common-card', 'digital-card', 'just-in', 'entertainment']);
+    for (const template of templates) {
+      expect(template.canvas).toEqual({ width: 1080, height: 1080 });
+      expect(template.photo.x + template.photo.width).toBeLessThanOrEqual(1080);
+      expect(template.photo.y + template.photo.height).toBeLessThanOrEqual(1080);
+      expect(template.title.x + template.title.width).toBeLessThanOrEqual(1080);
+      expect(template.qr.x + template.qr.width).toBeLessThanOrEqual(1080);
+      expect(template.qr.y + template.qr.height).toBeLessThanOrEqual(1080);
+    }
+  });
+});
+
 describe('reducer', () => {
   it('generates, edits, resets layout and fully resets', () => {
     let state = initialCardState;
@@ -133,8 +150,8 @@ describe('reducer', () => {
     expect(state.fontSize).toBe(120);
     state = cardReducer(state, { type: 'SET_IMAGE_SCALE', scale: 99 });
     expect(state.imageScale).toBe(3);
-    state = cardReducer(state, { type: 'SWITCH_TEMPLATE', templateId: 'english-default' });
-    expect(state.templateId).toBe('english-default');
+    state = cardReducer(state, { type: 'SWITCH_TEMPLATE', templateId: 'digital-card' });
+    expect(state.templateId).toBe('digital-card');
     expect(state.title).toBe('Hello'); // content preserved
     state = cardReducer(state, { type: 'RESET_LAYOUT' });
     expect(state.imageScale).toBe(1);

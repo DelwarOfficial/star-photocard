@@ -26,8 +26,8 @@ Create the production secret with `wrangler secret put IMAGE_TOKEN_SECRET` (sepa
 
 - Astro SSR (`output: 'server'`) + `@astrojs/cloudflare` on Cloudflare Workers (not Pages, not a Node server).
 - One React island (`PhotocardEditor`) for the interactive tool; Astro owns shell, metadata, API routes.
-- `src/config/templates.ts` — typed registry (stable IDs, asset paths, 1080×1350 canvas, photo/date/tag/title/QR geometry). No magic numbers in components.
-- `src/lib/card/` — pure domain: `types`/`reducer` (explicit transitions, intrinsic pixels), `highlightTitle`, `geometry` (one shared cover function), `photoTag` (40 code-point Unicode), `renderer` + `html2canvasRenderer` (deterministic 1080×1350 PNG).
+- `src/config/templates.ts` — typed registry (stable IDs, asset paths, 1080×1080 canvas, photo/date/tag/title/QR geometry). No magic numbers in components.
+- `src/lib/card/` — pure domain: `types`/`reducer` (explicit transitions, intrinsic pixels), `highlightTitle`, `geometry` (one shared cover function), `photoTag` (40 code-point Unicode), `renderer` + `html2canvasRenderer` (deterministic 1080×1080 PNG).
 - `src/lib/article/` — URL policy plus inert-HTML extraction (title/image/date/language with documented fallbacks).
 - `src/lib/security/` — `boundedFetch` (manual redirects ≤3, per-hop host revalidation, 10s aborts, streamed 2 MiB HTML / 8 MiB image caps, MIME + magic-byte checks), `imageToken` (Web Crypto HMAC, short-lived), `cacheKey` (token-free hashed keys, best-effort Cache API).
 - `src/pages/api/article.ts` — `POST { url }` → typed envelope with `canonicalUrl/title/publishedAt/formattedDate/dateSource/language/imageUrl?`. Rate-limits before upstream work, caches metadata ~5 min, validates image candidates in order (first downloadable wins).
@@ -50,7 +50,7 @@ Create the production secret with `wrangler secret put IMAGE_TOKEN_SECRET` (sepa
 
 ## Parity differences (intentional)
 
-See `MIGRATION_PARITY_LEDGER.md`. Headliners: no Google Fonts/CDN, bounded photo drag + keyboard controls, exposed missing-date provenance, persistent status, secure-context clipboard handling, `star-news-photocard-YYYYMMDD-HHmmss.png` filenames, outer QR box corrected to (886, 1061, 134, 134).
+See `MIGRATION_PARITY_LEDGER.md`. Headliners: square 1080 × 1080 canvas matching the template artwork, per-template layer geometry, no Google Fonts/CDN, bounded photo drag + keyboard controls, exposed missing-date provenance, persistent status, secure-context clipboard handling, `star-news-photocard-YYYYMMDD-HHmmss.png` filenames.
 
 ## Troubleshooting
 

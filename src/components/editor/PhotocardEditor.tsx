@@ -300,7 +300,7 @@ export default function PhotocardEditor() {
         document.body.appendChild(link);
         link.click();
         link.remove();
-        announce('success', 'PNG downloaded at exactly 1080 × 1350.');
+        announce('success', 'PNG downloaded at exactly 1080 × 1080.');
       } finally {
         setTimeout(() => URL.revokeObjectURL(url), 5000);
       }
@@ -338,7 +338,7 @@ export default function PhotocardEditor() {
         <div>
           <p className="eyebrow">Star News Studio</p>
           <h1>Photocard Generator</h1>
-          <p className="subhead">1080 × 1350 PNG · Star News articles · Bengali + English</p>
+          <p className="subhead">1080 × 1080 PNG · Star News articles · Bengali + English</p>
         </div>
         <button type="button" className="button secondary" onClick={fullReset}>
           Reset
@@ -404,9 +404,15 @@ export default function PhotocardEditor() {
                 rows={3}
                 value={card.title}
                 placeholder="Article headline"
-                aria-describedby="headline-help"
+                aria-describedby="headline-help headline-stats"
                 onChange={(e) => dispatch({ type: 'SET_TITLE', title: e.target.value })}
               />
+              <p id="headline-stats" className="word-hint" aria-live="off">
+                {(() => {
+                  const words = card.title.trim() ? card.title.trim().split(/\s+/u).length : 0;
+                  return `${words} ${words === 1 ? 'word' : 'words'} · auto size ${titleFontSize(card.title)}px`;
+                })()}
+              </p>
               <small id="headline-help">
                 Wrap words in *asterisks* to highlight them. Without markup, part of the title highlights
                 automatically. New lines are preserved.
@@ -659,7 +665,15 @@ export default function PhotocardEditor() {
                 }}
                 onKeyDown={onLayerKeyDown('photo')}
               >
-                <div className="photo-window">
+                <div
+                  className="photo-window"
+                  style={{
+                    left: template.photo.x,
+                    top: template.photo.y,
+                    width: template.photo.width,
+                    height: template.photo.height,
+                  }}
+                >
                   <img
                     className="photo"
                     src={card.image.src}
@@ -672,8 +686,30 @@ export default function PhotocardEditor() {
                 </div>
               </DraggableLayer>
               <img className="card-template" src={template.src} alt="" draggable={false} />
-              <div className="card-date">{card.publicationDate || 'তারিখ'}</div>
-              {card.photoTag && <div className="photo-tag">{card.photoTag}</div>}
+              <div
+                className="card-date"
+                style={{
+                  left: template.date.x,
+                  top: template.date.y,
+                  width: template.date.width,
+                  fontSize: template.date.fontSize,
+                }}
+              >
+                {card.publicationDate || 'তারিখ'}
+              </div>
+              {card.photoTag && (
+                <div
+                  className="photo-tag"
+                  style={{
+                    left: template.photoTag.x,
+                    top: template.photoTag.y,
+                    maxWidth: template.photoTag.maxWidth,
+                    fontSize: template.photoTag.fontSize,
+                  }}
+                >
+                  {card.photoTag}
+                </div>
+              )}
               <DraggableLayer
                 label="Headline layer"
                 position={card.titlePosition}
@@ -689,7 +725,12 @@ export default function PhotocardEditor() {
               >
                 <div
                   className="card-title"
-                  style={{ left: card.titlePosition.x, top: card.titlePosition.y, fontSize: card.fontSize }}
+                  style={{
+                    left: card.titlePosition.x,
+                    top: card.titlePosition.y,
+                    width: template.title.width,
+                    fontSize: card.fontSize,
+                  }}
                 >
                   {card.title ? (
                     titleLines.map((line, i) => (
@@ -720,14 +761,26 @@ export default function PhotocardEditor() {
                   }}
                   onKeyDown={onLayerKeyDown('qr')}
                 >
-                  <div className="qr" style={{ left: card.qrPosition.x, top: card.qrPosition.y }}>
+                  <div
+                    className="qr"
+                    style={{
+                      left: card.qrPosition.x,
+                      top: card.qrPosition.y,
+                      width: template.qr.width,
+                      height: template.qr.height,
+                      padding: template.qr.inset,
+                    }}
+                  >
                     <img src={qrDataUrl} alt="QR code linking to the source article" draggable={false} />
                   </div>
                 </DraggableLayer>
               )}
             </div>
           </div>
-          <p className="dimensions">1080 × 1350 PNG · preview scale {scale.toFixed(2)}×</p>
+          <p className="dimensions">1080 × 1080 PNG · preview scale {scale.toFixed(2)}×</p>
+          {card.loadStatus === 'idle' && (
+            <p className="dimensions">Tip: paste a Star News URL above, or type a headline to preview the layout.</p>
+          )}
         </section>
       </div>
     </div>

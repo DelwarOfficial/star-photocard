@@ -23,17 +23,18 @@ export class Html2CanvasRenderer implements CardRenderer {
       await decodeImage(snapshot.qrDataUrl).catch(() => undefined);
     }
 
+    const template = getTemplate(snapshot.state.templateId);
+    const canvasWidth = template.canvas.width;
+    const canvasHeight = template.canvas.height;
+
     const container = document.createElement('div');
     container.setAttribute('aria-hidden', 'true');
-    container.style.cssText =
-      'position:fixed;left:-9999px;top:0;width:1080px;height:1350px;overflow:hidden;background:#fff;';
-    const template = getTemplate(snapshot.state.templateId);
+    container.style.cssText = `position:fixed;left:-9999px;top:0;width:${canvasWidth}px;height:${canvasHeight}px;overflow:hidden;background:#fff;`;
 
     try {
       container.innerHTML = '';
       const card = document.createElement('div');
-      card.style.cssText =
-        'position:relative;width:1080px;height:1350px;overflow:hidden;background:#fff;';
+      card.style.cssText = `position:relative;width:${canvasWidth}px;height:${canvasHeight}px;overflow:hidden;background:#fff;`;
       container.appendChild(card);
 
       // Photo layer with explicit cover geometry.
@@ -59,7 +60,7 @@ export class Html2CanvasRenderer implements CardRenderer {
       const overlay = document.createElement('img');
       overlay.crossOrigin = 'anonymous';
       overlay.src = templateImg.src;
-      overlay.style.cssText = 'position:absolute;inset:0;width:1080px;height:1350px;';
+      overlay.style.cssText = `position:absolute;inset:0;width:${canvasWidth}px;height:${canvasHeight}px;`;
       card.appendChild(overlay);
 
       // Date / tag / title are rendered as plain text nodes (no editor chrome).
@@ -96,17 +97,17 @@ export class Html2CanvasRenderer implements CardRenderer {
         scale: 1,
         useCORS: true,
         allowTaint: false,
-        width: 1080,
-        height: 1350,
-        windowWidth: 1080,
-        windowHeight: 1350,
+        width: canvasWidth,
+        height: canvasHeight,
+        windowWidth: canvasWidth,
+        windowHeight: canvasHeight,
       });
       const output = document.createElement('canvas');
-      output.width = 1080;
-      output.height = 1350;
+      output.width = canvasWidth;
+      output.height = canvasHeight;
       const ctx = output.getContext('2d');
       if (!ctx) throw new Error('EXPORT_FAILED');
-      ctx.drawImage(canvas, 0, 0, 1080, 1350);
+      ctx.drawImage(canvas, 0, 0, canvasWidth, canvasHeight);
       const blob = await new Promise<Blob | null>((resolve) => output.toBlob(resolve, 'image/png'));
       if (!blob) throw new Error('EXPORT_FAILED');
       return blob;

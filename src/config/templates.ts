@@ -3,14 +3,14 @@ export type Point = Readonly<{ x: number; y: number }>;
 export type Rect = Readonly<Point & { width: number; height: number }>;
 
 export const CARD_WIDTH = 1080;
-export const CARD_HEIGHT = 1350;
+export const CARD_HEIGHT = 1080;
 
 export type TemplateDefinition = Readonly<{
   id: string;
   label: string;
   /** Public asset path for the full-size template PNG. */
   src: string;
-  /** Thumbnail path (3:4 preview). Reuses src until dedicated thumbnails exist. */
+  /** Thumbnail path (square preview). Reuses src until dedicated thumbnails exist. */
   thumbnail: string;
   language: Language;
   canvas: Readonly<{ width: number; height: number }>;
@@ -21,45 +21,66 @@ export type TemplateDefinition = Readonly<{
   qr: Rect & Readonly<{ inset: number }>;
 }>;
 
-/**
- * Compatibility geometry (intrinsic card pixels, from legacy audit).
- * QR: outer 134x134 box (120px code + 7px inset each side), anchored
- * 60px from right and 155px from bottom: x = 1080-60-134 = 886,
- * y = 1350-155-134 = 1061.
- */
-const base = {
-  canvas: { width: CARD_WIDTH, height: CARD_HEIGHT },
-  photo: { x: 1, y: 1, width: 1080, height: 730 },
-  date: { x: 290, y: 655, width: 500, fontSize: 34 },
-  photoTag: { x: 40, y: 585, maxWidth: 1000, fontSize: 30 },
-  title: { x: 20, y: 745, width: 1040, defaultFontSize: 75 },
-  qr: { x: 886, y: 1061, width: 134, height: 134, inset: 7 },
-} as const;
+const canvas = { width: CARD_WIDTH, height: CARD_HEIGHT } as const;
 
+/**
+ * Measured from the 2160 × 2160 square artwork (halved to 1080).
+ * Each template carries its own geometry — layouts differ, so no shared
+ * base. Date text sits right of the baked-in calendar icon (bottom-left);
+ * QR floats over low-content areas because no template reserves a QR zone.
+ */
 export const templates: readonly TemplateDefinition[] = [
   {
-    id: 'bengali-default',
-    label: 'Bengali Default',
-    src: '/templates/bengali-default.png',
-    thumbnail: '/templates/bengali-default.png',
+    id: 'common-card',
+    label: 'Common Card',
+    src: '/templates/common-card.png',
+    thumbnail: '/templates/common-card.png',
     language: 'bn',
-    ...base,
+    canvas,
+    photo: { x: 0, y: 0, width: 1080, height: 430 },
+    date: { x: 110, y: 1048, width: 320, fontSize: 28 },
+    photoTag: { x: 30, y: 350, maxWidth: 600, fontSize: 30 },
+    title: { x: 170, y: 745, width: 730, defaultFontSize: 60 },
+    qr: { x: 886, y: 30, width: 134, height: 134, inset: 7 },
   },
   {
-    id: 'english-default',
-    label: 'English Default',
-    src: '/templates/english-default.png',
-    thumbnail: '/templates/english-default.png',
+    id: 'digital-card',
+    label: 'Digital Card',
+    src: '/templates/digital-card.png',
+    thumbnail: '/templates/digital-card.png',
     language: 'en',
-    ...base,
+    canvas,
+    photo: { x: 0, y: 0, width: 1080, height: 430 },
+    date: { x: 110, y: 1048, width: 320, fontSize: 28 },
+    photoTag: { x: 30, y: 350, maxWidth: 600, fontSize: 30 },
+    title: { x: 170, y: 745, width: 730, defaultFontSize: 60 },
+    qr: { x: 886, y: 30, width: 134, height: 134, inset: 7 },
   },
   {
-    id: 'usa-card',
-    label: 'USA Card',
-    src: '/templates/usa-card.png',
-    thumbnail: '/templates/usa-card.png',
+    id: 'just-in',
+    label: 'Just In',
+    src: '/templates/just-in.png',
+    thumbnail: '/templates/just-in.png',
+    language: 'bn',
+    canvas,
+    photo: { x: 0, y: 533, width: 1080, height: 238 },
+    date: { x: 110, y: 1048, width: 320, fontSize: 28 },
+    photoTag: { x: 30, y: 690, maxWidth: 600, fontSize: 30 },
+    title: { x: 40, y: 130, width: 820, defaultFontSize: 72 },
+    qr: { x: 900, y: 100, width: 134, height: 134, inset: 7 },
+  },
+  {
+    id: 'entertainment',
+    label: 'Entertainment',
+    src: '/templates/entertainment.png',
+    thumbnail: '/templates/entertainment.png',
     language: 'en',
-    ...base,
+    canvas,
+    photo: { x: 0, y: 0, width: 1080, height: 260 },
+    date: { x: 110, y: 1048, width: 320, fontSize: 28 },
+    photoTag: { x: 30, y: 180, maxWidth: 600, fontSize: 30 },
+    title: { x: 40, y: 700, width: 1000, defaultFontSize: 64 },
+    qr: { x: 886, y: 30, width: 134, height: 134, inset: 7 },
   },
 ];
 
