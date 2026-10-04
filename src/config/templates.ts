@@ -17,7 +17,7 @@ export type TemplateDefinition = Readonly<{
   photo: Rect;
   date: Readonly<Point & { width: number; fontSize: number }>;
   photoTag: Readonly<Point & { maxWidth: number; fontSize: number }>;
-  title: Readonly<Point & { width: number; defaultFontSize: number }>;
+  title: Readonly<Point & { width: number; defaultFontSize: number; maxFontSize: number }>;
   qr: Rect & Readonly<{ inset: number }>;
 }>;
 
@@ -38,9 +38,9 @@ export const templates: readonly TemplateDefinition[] = [
     language: 'bn',
     canvas,
     photo: { x: 0, y: 0, width: 1080, height: 430 },
-    date: { x: 110, y: 1048, width: 320, fontSize: 28 },
+    date: { x: 100, y: 1048, width: 270, fontSize: 28 },
     photoTag: { x: 30, y: 350, maxWidth: 600, fontSize: 30 },
-    title: { x: 170, y: 745, width: 730, defaultFontSize: 60 },
+    title: { x: 170, y: 745, width: 730, defaultFontSize: 60, maxFontSize: 60 },
     qr: { x: 886, y: 30, width: 134, height: 134, inset: 7 },
   },
   {
@@ -51,9 +51,9 @@ export const templates: readonly TemplateDefinition[] = [
     language: 'en',
     canvas,
     photo: { x: 0, y: 0, width: 1080, height: 430 },
-    date: { x: 110, y: 1048, width: 320, fontSize: 28 },
+    date: { x: 100, y: 1048, width: 270, fontSize: 28 },
     photoTag: { x: 30, y: 350, maxWidth: 600, fontSize: 30 },
-    title: { x: 170, y: 745, width: 730, defaultFontSize: 60 },
+    title: { x: 170, y: 745, width: 730, defaultFontSize: 60, maxFontSize: 60 },
     qr: { x: 886, y: 30, width: 134, height: 134, inset: 7 },
   },
   {
@@ -64,9 +64,9 @@ export const templates: readonly TemplateDefinition[] = [
     language: 'bn',
     canvas,
     photo: { x: 0, y: 533, width: 1080, height: 238 },
-    date: { x: 110, y: 1048, width: 320, fontSize: 28 },
+    date: { x: 100, y: 1048, width: 270, fontSize: 28 },
     photoTag: { x: 30, y: 690, maxWidth: 600, fontSize: 30 },
-    title: { x: 40, y: 130, width: 820, defaultFontSize: 72 },
+    title: { x: 40, y: 130, width: 820, defaultFontSize: 72, maxFontSize: 72 },
     qr: { x: 900, y: 100, width: 134, height: 134, inset: 7 },
   },
   {
@@ -77,9 +77,9 @@ export const templates: readonly TemplateDefinition[] = [
     language: 'en',
     canvas,
     photo: { x: 0, y: 0, width: 1080, height: 260 },
-    date: { x: 110, y: 1048, width: 320, fontSize: 28 },
+    date: { x: 100, y: 1048, width: 270, fontSize: 28 },
     photoTag: { x: 30, y: 180, maxWidth: 600, fontSize: 30 },
-    title: { x: 40, y: 700, width: 1000, defaultFontSize: 64 },
+    title: { x: 40, y: 700, width: 1000, defaultFontSize: 48, maxFontSize: 60 },
     qr: { x: 886, y: 30, width: 134, height: 134, inset: 7 },
   },
 ];

@@ -1,4 +1,4 @@
-import { getTemplate, type Language } from '../../config/templates';
+import { type Language } from '../../config/templates';
 import { formatDhakaDate, parseArticleDate } from '../text/dates';
 
 export type DateSource = 'json-ld' | 'meta' | 'time' | 'fallback-now';
@@ -391,8 +391,4 @@ export function decodeEntities(value: string): string {
         return _m;
       }
     });
-}
-
-export function templateLanguageHint(templateId: string): Language {
-  return getTemplate(templateId).language;
 }

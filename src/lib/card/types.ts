@@ -20,7 +20,7 @@ export type CardState = Readonly<{
   isDirty: boolean;
 }>;
 
-export const FALLBACK_IMAGE_SRC = '/images/default-news.jpg';
+export const FALLBACK_IMAGE_SRC = '/photos/default-news.jpg';
 
 export const initialCardState: CardState = {
   sourceUrl: '',

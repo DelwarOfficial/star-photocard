@@ -129,6 +129,8 @@ describe('template registry', () => {
       expect(template.title.x + template.title.width).toBeLessThanOrEqual(1080);
       expect(template.qr.x + template.qr.width).toBeLessThanOrEqual(1080);
       expect(template.qr.y + template.qr.height).toBeLessThanOrEqual(1080);
+      expect(template.title.maxFontSize).toBeLessThanOrEqual(120);
+      expect(template.title.defaultFontSize).toBeLessThanOrEqual(template.title.maxFontSize);
     }
   });
 });

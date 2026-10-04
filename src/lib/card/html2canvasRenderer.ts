@@ -17,7 +17,7 @@ export class Html2CanvasRenderer implements CardRenderer {
     // Decode assets before snapshotting so export is deterministic.
     const [templateImg, photoImg] = await Promise.all([
       decodeImage(snapshot.templateSrc),
-      decodeImage(snapshot.photoSrc).catch(() => decodeImage('/images/default-news.jpg')),
+      decodeImage(snapshot.photoSrc).catch(() => decodeImage('/photos/default-news.jpg')),
     ]);
     if (snapshot.qrDataUrl) {
       await decodeImage(snapshot.qrDataUrl).catch(() => undefined);

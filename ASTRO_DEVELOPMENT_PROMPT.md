@@ -1,5 +1,11 @@
 # Professional Astro Conversion and Development Prompt
 
+> **Superseded for greenfield work.** The migration this prompt describes
+> is complete and later owner decisions changed key requirements
+> (`starnews.com.bd` host, square 1080 × 1080 canvas, four new
+> templates). Use it for historical context only; current truth lives in
+> `MIGRATION_PARITY_LEDGER.md`. Do not re-run it blindly.
+
 Copy the prompt below into your coding agent from the repository root.
 
 ```text

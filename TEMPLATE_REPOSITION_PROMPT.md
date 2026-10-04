@@ -1,5 +1,9 @@
 # Template Reposition Prompt — New Star News Artwork
 
+> **Executed 2026-09-14** (registry rewritten, square canvas, Chromium
+> screenshot-verified). Kept for history — do not re-run as-is; the
+> filenames, geometry, and canvas statements inside are now stale.
+
 Copy the prompt below into your coding agent from the repository root.
 It re-seats every card layer (photo, title, date, photo tag, QR) onto the
 replacement template artwork in `public/templates/`.

@@ -1,5 +1,14 @@
 # Star News Photocard Generator
 
+> **Frozen as authored — read with the ledger.** Later owner decisions
+> supersede parts of this plan: the source host is now
+> `starnews.com.bd` (not `rtvonline.com`), the canvas is square
+> 1080 × 1080 (not 1080 × 1350), and the three legacy templates were
+> replaced by four measured entries (`common-card`, `digital-card`,
+> `just-in`, `entertainment`). Where this document conflicts with
+> `MIGRATION_PARITY_LEDGER.md`, the ledger wins. Do not "fix" the code
+> back toward this plan without owner approval.
+
 ## Astro Migration Master Plan and Implementation Prompt
 
 **Source:** RTV Photo Card Generator WordPress plugin v5.3.4  

@@ -43,7 +43,7 @@ export default function PhotocardEditor() {
   const [card, dispatch] = useReducer(cardReducer, initialCardState);
   const [status, setStatus] = useState<{ tone: StatusTone; text: string }>({
     tone: 'info',
-    text: 'Paste an Star News article URL to begin. Export stays disabled until a card is ready.',
+    text: 'Paste a Star News article URL to begin. Export stays disabled until a card is ready.',
   });
   const [urlError, setUrlError] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState('');
@@ -60,7 +60,8 @@ export default function PhotocardEditor() {
   const template = useMemo(() => getTemplate(card.templateId), [card.templateId]);
   const titleLines = useMemo(() => tokenizeTitle(card.title), [card.title]);
   const scale = useMemo(() => previewScale(previewWidth, Number.POSITIVE_INFINITY), [previewWidth]);
-  const clipboardSupported = useMemo(() => isClipboardSupported(), []);
+  // Computed after mount so SSR and first client render agree (avoids hydration mismatch).
+  const [clipboardSupported, setClipboardSupported] = useState(false);
 
   useEffect(() => {
     const node = previewFrameRef.current;
@@ -71,6 +72,10 @@ export default function PhotocardEditor() {
     });
     observer.observe(node);
     return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    setClipboardSupported(isClipboardSupported());
   }, []);
 
   useEffect(() => {
@@ -137,7 +142,7 @@ export default function PhotocardEditor() {
         URL.revokeObjectURL(localUrlRef.current);
         localUrlRef.current = undefined;
       }
-      const imageSrc = data.imageUrl ?? '/images/default-news.jpg';
+      const imageSrc = data.imageUrl ?? '/photos/default-news.jpg';
       const imageKind = data.imageUrl ? ('remote' as const) : ('fallback' as const);
       setLastRemoteImage({ src: imageSrc, kind: imageKind });
       dispatch({
@@ -148,7 +153,11 @@ export default function PhotocardEditor() {
         imageSrc,
         imageKind,
       });
-      dispatch({ type: 'SET_FONT_SIZE', size: titleFontSize(data.title) });
+      // Auto-size capped by the active template's title box.
+      dispatch({
+        type: 'SET_FONT_SIZE',
+        size: Math.min(titleFontSize(data.title), template.title.maxFontSize),
+      });
       if (data.dateSource === 'fallback-now') {
         announce(
           'warning',
@@ -169,7 +178,7 @@ export default function PhotocardEditor() {
       dispatch({ type: 'GENERATE_ERROR' });
       announce('error', err instanceof Error ? err.message : 'The article could not be loaded.');
     }
-  }, [card.sourceUrl, announce]);
+  }, [card.sourceUrl, template, announce]);
 
   const cancelGenerate = useCallback(() => {
     abortRef.current?.abort();
