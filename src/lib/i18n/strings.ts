@@ -98,9 +98,16 @@ export const S = {
     help: 'Today’s date is filled in for you — change it if you need to.',
   },
   category: {
+    none: 'No category',
+    custom: 'Custom…',
+    fromArticle: (value: string) => `${value} (from article)`,
+    customLabel: 'Your category',
+    customPlaceholder: 'e.g. বিজ্ঞান',
+    count: (used: number, max: number) => `${used}/${max} characters — leave it empty for no label.`,
+    useArticle: 'Use the article’s category',
+    noPill: 'This card design has no category label. It shows on the Photo on top and Photo at bottom cards.',
     label: 'Category (yellow label)',
-    placeholder: 'e.g. রাজনীতি',
-    help: (used: number, max: number) => `Filled in from the article when we can find it. ${used}/${max} characters — leave it empty for no label.`,
+    help: 'Filled in from the article when we can find it. Pick another section or write your own.',
   },
   credit: {
     label: 'Photo tag',

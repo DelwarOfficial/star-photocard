@@ -4,7 +4,7 @@ import { EXPORT_HEIGHT, EXPORT_SCALE, EXPORT_WIDTH, getTemplate, SITE_URL, type 
 import { tokenizeTitle } from '../../lib/card/highlightTitle';
 import { defaultRenderer } from '../../lib/card/html2canvasRenderer';
 import { clampPhotoOffset, clampToCanvas, effectivePhotoFit, previewScale } from '../../lib/card/geometry';
-import { hasTag, PHOTO_CREDIT_PRESETS, PHOTO_TAG_MAX_LENGTH, PHOTO_TAG_PRESETS } from '../../lib/card/photoTag';
+import { CATEGORY_PRESETS, hasTag, PHOTO_CREDIT_PRESETS, PHOTO_TAG_MAX_LENGTH } from '../../lib/card/photoTag';
 import { cardReducer, type CardAction, clampZoom, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from '../../lib/card/reducer';
 import { decodeImage, downloadFilename, isClipboardSupported } from '../../lib/card/renderer';
 import { titleFits } from '../../lib/card/titleBounds';
@@ -15,7 +15,7 @@ import { S, UI_LANG, type LayerKey } from '../../lib/i18n/strings';
 import { Icon, StarMark } from './Icon';
 import { TemplatePicker } from './TemplatePicker';
 import { NudgePad, RangeField, SectionHead } from './Controls';
-import { isStarNewsHost } from '../../lib/article/normalizeArticleUrl';
+import { isStarNewsHost, shortArticleUrl } from '../../lib/article/normalizeArticleUrl';
 
 type ArticlePayload = {
   canonicalUrl: string;
@@ -26,6 +26,10 @@ type ArticlePayload = {
   /** Set when the article has photos the server could not serve (no signing secret). */
   imageNotice?: 'signing-unconfigured';
 };
+
+/** Category dropdown sentinels (never valid category text). */
+const CHOICE_AUTO = '__auto__';
+const CHOICE_CUSTOM = '__custom__';
 
 type StatusTone = 'info' | 'success' | 'warning' | 'error';
 
@@ -93,6 +97,8 @@ export default function PhotocardEditor() {
   }, []);
   // Custom credit: the text field stays open even while empty (empty custom = no tag).
   const [customCredit, setCustomCredit] = useState(false);
+  // Custom category: the text field stays open even while empty (empty custom = no label).
+  const [customCategory, setCustomCategory] = useState(false);
   const [lastRemoteImage, setLastRemoteImage] = useState<{ src: string; kind: 'remote' | 'fallback' } | null>(null);
 
   const requestSeq = useRef(0);
@@ -118,7 +124,8 @@ export default function PhotocardEditor() {
   const titleHeight = (): number =>
     Math.min(template.canvas.height, titleRef.current?.offsetHeight || card.fontSize * 1.3);
   // Article cards encode the reference news link; custom cards have none, so they encode the root domain.
-  const qrTarget = template.qr ? (template.mode === 'article' ? card.articleUrl : SITE_URL) : '';
+  // Article cards: the short link (section + ID); custom cards have no article, so the root domain.
+  const qrTarget = template.qr ? (template.mode === 'article' ? (card.articleUrl ? shortArticleUrl(card.articleUrl) : '') : SITE_URL) : '';
   const titleLines = useMemo(() => tokenizeTitle(card.title), [card.title]);
   // Intrinsic size of the displayed photo; drag bounds must use the same cover math as export.
   const [photoSize, setPhotoSize] = useState({ width: 1920, height: 1080 });
@@ -350,6 +357,7 @@ export default function PhotocardEditor() {
     if (remoteUrlRef.current) URL.revokeObjectURL(remoteUrlRef.current);
     remoteUrlRef.current = undefined;
     setCustomCredit(false);
+    setCustomCategory(false);
     setUrlError(null);
     dispatch({ type: 'FULL_RESET', date: todayBanglaDate(), templateId: template.id });
     announce('info', S.status.reset);
@@ -484,6 +492,18 @@ export default function PhotocardEditor() {
   const pill = pillStyle(template);
   const credit = creditStyle(template);
   const creditIsPreset = (PHOTO_CREDIT_PRESETS as readonly string[]).includes(card.photoCredit);
+  // Category dropdown: a preset, the article's own (non-preset) category, or a custom value.
+  const categoryIsPreset = (CATEGORY_PRESETS as readonly string[]).includes(card.photoTag);
+  const categoryIsAuto = !card.categoryEdited && card.photoTag !== '' && card.photoTag === card.autoCategory;
+  const categoryChoice = customCategory
+    ? CHOICE_CUSTOM
+    : card.photoTag === ''
+      ? ''
+      : categoryIsPreset
+        ? card.photoTag
+        : categoryIsAuto
+          ? CHOICE_AUTO
+          : CHOICE_CUSTOM;
   const showCustomCredit = customCredit || (card.photoCredit !== '' && !creditIsPreset);
   const qr = qrStyle(template, card);
   const emphasis = highlightColor(template);
@@ -670,27 +690,63 @@ export default function PhotocardEditor() {
               </div>
               <small id="pub-date-help">{S.date.help}</small>
 
-              {template.photoTag && (
-                <>
-                  <label htmlFor="photo-tag">{S.category.label}</label>
+              <label htmlFor="photo-tag">{S.category.label}</label>
+              <select
+                id="photo-tag" lang="bn"
+                value={categoryChoice}
+                aria-describedby="photo-tag-help"
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === CHOICE_CUSTOM) {
+                    setCustomCategory(true);
+                    // Start Custom empty rather than carrying a preset into the text field.
+                    if (categoryIsPreset || categoryIsAuto) dispatch({ type: 'SET_PHOTO_TAG', tag: '' });
+                    return;
+                  }
+                  setCustomCategory(false);
+                  if (value === CHOICE_AUTO) dispatch({ type: 'RESET_CATEGORY' });
+                  else dispatch({ type: 'SET_PHOTO_TAG', tag: value });
+                }}
+              >
+                <option value="">{S.category.none}</option>
+                {categoryIsAuto && !categoryIsPreset && (
+                  <option value={CHOICE_AUTO}>{S.category.fromArticle(card.photoTag)}</option>
+                )}
+                {CATEGORY_PRESETS.map((preset) => (
+                  <option key={preset} value={preset}>
+                    {preset}
+                  </option>
+                ))}
+                <option value={CHOICE_CUSTOM}>{S.category.custom}</option>
+              </select>
+              <small id="photo-tag-help">{template.photoTag ? S.category.help : S.category.noPill}</small>
+              {categoryChoice === CHOICE_CUSTOM && (
+                <div className="reveal">
+                  <label htmlFor="photo-tag-custom">{S.category.customLabel}</label>
                   <input
-                    id="photo-tag" lang="bn"
+                    id="photo-tag-custom" lang="bn"
                     type="text"
-                    list="photo-tag-presets"
                     value={card.photoTag}
-                    maxLength={PHOTO_TAG_MAX_LENGTH}
-                    placeholder={S.category.placeholder}
+                    placeholder={S.category.customPlaceholder}
                     autoComplete="off"
-                    aria-describedby="photo-tag-help"
+                    aria-describedby="photo-tag-count"
                     onChange={(e) => dispatch({ type: 'SET_PHOTO_TAG', tag: e.target.value })}
                   />
-                  <datalist id="photo-tag-presets">
-                    {PHOTO_TAG_PRESETS.map((preset) => (
-                      <option key={preset} value={preset} />
-                    ))}
-                  </datalist>
-                  <small id="photo-tag-help">{S.category.help(Array.from(card.photoTag).length, PHOTO_TAG_MAX_LENGTH)}</small>
-                </>
+                  <small id="photo-tag-count">{S.category.count(Array.from(card.photoTag).length, PHOTO_TAG_MAX_LENGTH)}</small>
+                </div>
+              )}
+              {card.categoryEdited && card.autoCategory && (
+                <button
+                  type="button"
+                  className="button ghost"
+                  onClick={() => {
+                    setCustomCategory(false);
+                    dispatch({ type: 'RESET_CATEGORY' });
+                  }}
+                >
+                  <Icon name="reset" size={18} />
+                  {S.category.useArticle}
+                </button>
               )}
 
               {template.photoCredit && (

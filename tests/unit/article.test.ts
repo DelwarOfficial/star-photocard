@@ -9,7 +9,7 @@ import {
   getBestSrcsetUrl,
   normalizeImageUrl,
 } from '../../src/lib/article/extractArticle';
-import { isRtvHost, isStarNewsHost, normalizeArticleUrl, resolveRedirect } from '../../src/lib/article/normalizeArticleUrl';
+import { isRtvHost, isStarNewsHost, normalizeArticleUrl, resolveRedirect, shortArticleUrl } from '../../src/lib/article/normalizeArticleUrl';
 import { fetchArticleHtml, fetchImageBytes, probeImage, verifyImageSignature } from '../../src/lib/security/boundedFetch';
 import { signImageUrl, verifyImageToken } from '../../src/lib/security/imageToken';
 
@@ -154,6 +154,40 @@ describe('bounded fetch', () => {
     await expect(
       fetchArticleHtml(new URL('https://www.starnews.com.bd/a'), { fetchImpl: fetchImpl as typeof fetch }),
     ).rejects.toThrow('REDIRECT_LOOP');
+  });
+
+  it('accepts an oversized page when its <head> arrived within the cap (embedded body images)', async () => {
+    const head = '<html><head><meta property="og:title" content="T"><meta property="og:image" content="https://starnews.com.bd/i.jpg"></head><body>';
+    const page = head + 'A'.repeat(5000); // the body blows past the cap
+    const fetchImpl = vi.fn(async () => htmlResponse(page, { 'content-length': String(page.length) }));
+    const result = await fetchArticleHtml(new URL('https://www.starnews.com.bd/a'), { maxBytes: 1024, fetchImpl: fetchImpl as typeof fetch });
+    expect(result.truncated).toBe(true);
+    expect(result.bytes).toBe(1024);
+    expect(result.html.startsWith(head)).toBe(true);
+    // A page that fits is read whole and not marked truncated, including one exactly at the cap.
+    const exact = head.padEnd(1024, 'x');
+    const whole = await fetchArticleHtml(new URL('https://www.starnews.com.bd/b'), {
+      maxBytes: 1024,
+      fetchImpl: (async () => htmlResponse(exact)) as typeof fetch,
+    });
+    expect(whole).toMatchObject({ truncated: false, bytes: 1024 });
+  });
+
+  it('still rejects an oversized page whose <head> did not fit', async () => {
+    const page = '<html><head>' + 'x'.repeat(5000) + '</head>';
+    await expect(
+      fetchArticleHtml(new URL('https://www.starnews.com.bd/a'), { maxBytes: 1024, fetchImpl: (async () => htmlResponse(page)) as typeof fetch }),
+    ).rejects.toThrow('RESPONSE_TOO_LARGE');
+  });
+
+  it('shortens article URLs for the QR to origin + section + ID', () => {
+    expect(shortArticleUrl('https://starnews.com.bd/country/25819/accused-in-x-recovered.html')).toBe('https://starnews.com.bd/country/25819');
+    expect(shortArticleUrl('https://starnews.com.bd/country/25819/slug.html?utm=1#top')).toBe('https://starnews.com.bd/country/25819');
+    expect(shortArticleUrl('https://starnews.com.bd/country/25819/')).toBe('https://starnews.com.bd/country/25819');
+    // Fewer than two segments are kept whole.
+    expect(shortArticleUrl('https://www.starnews.com.bd/bangla-news')).toBe('https://www.starnews.com.bd/bangla-news');
+    expect(shortArticleUrl('https://starnews.com.bd/')).toBe('https://starnews.com.bd');
+    expect(shortArticleUrl('not a url')).toBe('not a url');
   });
 
   it('enforces streamed byte caps', async () => {

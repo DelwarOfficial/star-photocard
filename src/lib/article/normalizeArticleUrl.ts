@@ -49,3 +49,20 @@ export function resolveRedirect(current: URL, location: string): URL {
   next.hash = '';
   return next;
 }
+
+/**
+ * Short form of an article URL for the card's QR code: origin + the first two path
+ * segments (section + ID), dropping the slug, query, hash and trailing slash.
+ *   https://starnews.com.bd/country/25819/some-long-slug.html → https://starnews.com.bd/country/25819
+ * Paths with fewer than two segments are kept whole; unparseable input is returned unchanged.
+ */
+export function shortArticleUrl(canonical: string): string {
+  let url: URL;
+  try {
+    url = new URL(canonical);
+  } catch {
+    return canonical;
+  }
+  const segments = url.pathname.split('/').filter(Boolean).slice(0, 2);
+  return segments.length ? `${url.origin}/${segments.join('/')}` : url.origin;
+}

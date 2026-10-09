@@ -20,6 +20,7 @@ export type CardAction =
   | Readonly<{ type: 'SET_DATE'; date: string }>
   | Readonly<{ type: 'INITIALIZE_DATE'; date: string }>
   | Readonly<{ type: 'SET_PHOTO_TAG'; tag: string }>
+  | Readonly<{ type: 'RESET_CATEGORY' }>
   | Readonly<{ type: 'SET_PHOTO_CREDIT'; credit: string }>
   | Readonly<{ type: 'SET_FONT_SIZE'; size: number }>
   | Readonly<{ type: 'SET_IMAGE_SCALE'; scale: number }>
@@ -65,6 +66,8 @@ export function cardReducer(state: CardState, action: CardAction): CardState {
       return {
         ...state,
         articleUrl: action.articleUrl,
+        // Auto category always updates; it reaches the pill only while there is no manual override.
+        autoCategory: normalizePhotoTag(action.category ?? ''),
         photoTag: state.categoryEdited ? state.photoTag : normalizePhotoTag(action.category ?? ''),
         title: action.title,
         // The card date is always today's (or the user's edit); the article date is not used.
@@ -87,6 +90,9 @@ export function cardReducer(state: CardState, action: CardAction): CardState {
       return { ...state, photoCredit: limitTagInput(action.credit), isDirty: true };
     case 'SET_PHOTO_TAG':
       return { ...state, photoTag: limitTagInput(action.tag), categoryEdited: true, isDirty: true };
+    case 'RESET_CATEGORY':
+      // Drop the manual override and go back to the fetched article's category.
+      return { ...state, photoTag: state.autoCategory, categoryEdited: false, isDirty: true };
     case 'SET_FONT_SIZE':
       return { ...state, fontSize: clampFontSize(action.size), isDirty: true };
     case 'SET_SHOW_WHOLE_PHOTO':

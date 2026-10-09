@@ -14,6 +14,8 @@ export type CardState = Readonly<{
   image: Readonly<{ kind: ImageKind; src: string }>;
   photoTag: string;
   categoryEdited: boolean;
+  /** Category from the last fetched article; "Use the article's category" restores it. */
+  autoCategory: string;
   /** Photo-credit tag text; empty = no tag. */
   photoCredit: string;
   /** "Show whole photo (no crop)": forces `contain` regardless of the template's fit. */
@@ -55,6 +57,7 @@ const baseCardState: CardState = {
   image: { kind: 'fallback', src: FALLBACK_IMAGE_SRC },
   photoTag: '',
   categoryEdited: false,
+  autoCategory: '',
   photoCredit: '',
   showWholePhoto: false,
   imageScale: 1,

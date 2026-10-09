@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { CARD_HEIGHT, CARD_WIDTH, EXPORT_HEIGHT, EXPORT_SCALE, EXPORT_WIDTH, templates, templatesForMode } from '../../src/config/templates';
 import { coverGeometry, clampPhotoOffset, clampToCanvas, effectivePhotoFit, photoGeometry, previewScale } from '../../src/lib/card/geometry';
 import { titleFontSize, tokenizeTitle } from '../../src/lib/card/highlightTitle';
-import { normalizePhotoTag, countCodePoints } from '../../src/lib/card/photoTag';
+import { CATEGORY_PRESETS, normalizePhotoTag, countCodePoints } from '../../src/lib/card/photoTag';
 import { cardReducer, clampZoom, ZOOM_MAX, ZOOM_MIN } from '../../src/lib/card/reducer';
 import { createCardState, initialCardState } from '../../src/lib/card/types';
 import { formatDhakaDate, parseArticleDate, toBanglaDigits, todayBanglaDate } from '../../src/lib/text/dates';
@@ -123,6 +123,33 @@ describe('dates', () => {
     expect(parseArticleDate('')).toBeNull();
     expect(parseArticleDate('2026-02-29')).toBeNull(); // 2026 is not a leap year
     expect(parseArticleDate('2024-02-29T00:00:00Z')).not.toBeNull();
+  });
+});
+
+describe('category', () => {
+  const fetched = (category: string | null) =>
+    ({ type: 'GENERATE_SUCCESS', articleUrl: 'https://starnews.com.bd/a/1', title: 't', language: 'bn', imageSrc: '/p.jpg', imageKind: 'remote', category }) as const;
+  it('tracks the auto category on every fetch; manual choices win and survive', () => {
+    let st = cardReducer(initialCardState, fetched('খেলা'));
+    expect(st).toMatchObject({ photoTag: 'খেলা', autoCategory: 'খেলা', categoryEdited: false });
+    st = cardReducer(st, fetched('বিশ্ব'));
+    expect(st).toMatchObject({ photoTag: 'বিশ্ব', autoCategory: 'বিশ্ব' });
+    st = cardReducer(st, { type: 'SET_PHOTO_TAG', tag: 'মতামত' });
+    st = cardReducer(st, fetched('বাণিজ্য'));
+    expect(st).toMatchObject({ photoTag: 'মতামত', autoCategory: 'বাণিজ্য', categoryEdited: true });
+  });
+  it('restores the latest auto category and clears the override; full reset clears both', () => {
+    let st = cardReducer(initialCardState, fetched('খেলা'));
+    st = cardReducer(st, { type: 'SET_PHOTO_TAG', tag: 'নিজের' });
+    st = cardReducer(st, fetched('শিক্ষা'));
+    st = cardReducer(st, { type: 'RESET_CATEGORY' });
+    expect(st).toMatchObject({ photoTag: 'শিক্ষা', categoryEdited: false });
+    expect(cardReducer(st, { type: 'FULL_RESET' })).toMatchObject({ photoTag: '', autoCategory: '', categoryEdited: false });
+  });
+  it('offers the 17 Star News sections as presets', () => {
+    expect(CATEGORY_PRESETS).toHaveLength(17);
+    expect(new Set(CATEGORY_PRESETS).size).toBe(17);
+    expect(CATEGORY_PRESETS).toContain('আইন ও আদালত');
   });
 });
 

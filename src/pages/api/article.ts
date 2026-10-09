@@ -149,6 +149,7 @@ export async function handleArticle(request: Request, clientAddress: string | un
         event: 'article_ok',
         redirects: fetched.redirects,
         bytes: fetched.bytes,
+        truncated: fetched.truncated,
         ms: Date.now() - startedAt,
       }),
     );

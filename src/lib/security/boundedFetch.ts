@@ -7,7 +7,8 @@ export const MAX_REDIRECTS = 3;
 
 const HTML_UA = 'Star News Photocard/1.0 (+https://starnews.com.bd/)';
 
-export type FetchedHtml = { url: URL; html: string; bytes: number; redirects: number };
+/** truncated: the page exceeded the byte cap and only its first maxBytes (with a complete <head>) were read. */
+export type FetchedHtml = { url: URL; html: string; bytes: number; redirects: number; truncated: boolean };
 export type FetchedImage = { bytes: Uint8Array; contentType: string; url: URL };
 
 /**
@@ -51,15 +52,51 @@ export async function fetchArticleHtml(
     if (!response.ok) throw new Error('UPSTREAM_ERROR');
     const contentType = (response.headers.get('content-type') ?? '').toLowerCase();
     if (!contentType.includes('text/html')) throw new Error('UNSUPPORTED_CONTENT');
-    const hinted = Number(response.headers.get('content-length'));
-    if (Number.isFinite(hinted) && hinted > maxBytes) {
-      await response.body?.cancel().catch(() => undefined);
-      throw new Error('RESPONSE_TOO_LARGE');
-    }
-    const html = await readBoundedText(response, maxBytes);
-    return { url, html, bytes: new TextEncoder().encode(html).length, redirects };
+    // Article pages can embed multi-MB base64 images in the body, but everything we extract
+    // (canonical, og:image, menu, JSON-LD) sits near the top. Read at most maxBytes — memory stays
+    // bounded — and accept a cut-off page only if its <head> arrived complete.
+    const { bytes, truncated } = await readPrefixBytes(response, maxBytes);
+    const html = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+    if (truncated && !/<\/head\s*>/i.test(html)) throw new Error('RESPONSE_TOO_LARGE');
+    return { url, html, bytes: bytes.byteLength, redirects, truncated };
   }
   throw new Error('REDIRECT_REJECTED');
+}
+
+/** Read up to maxBytes of a body; beyond that, stop (cancel the stream) and report truncation. */
+async function readPrefixBytes(response: Response, maxBytes: number): Promise<{ bytes: Uint8Array; truncated: boolean }> {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('EMPTY_RESPONSE');
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  let truncated = false;
+  try {
+    while (total < maxBytes) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      const take = Math.min(value.byteLength, maxBytes - total);
+      chunks.push(take === value.byteLength ? value : value.subarray(0, take));
+      total += take;
+      if (take < value.byteLength) truncated = true;
+    }
+    if (total >= maxBytes && !truncated) {
+      // Exactly at the cap: one more read tells us whether anything was left over.
+      const { done, value } = await reader.read();
+      truncated = !done && !!value && value.byteLength > 0;
+    }
+    if (truncated) await reader.cancel().catch(() => undefined);
+  } finally {
+    reader.releaseLock();
+  }
+  if (total === 0) throw new Error('EMPTY_RESPONSE');
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { bytes: merged, truncated };
 }
 
 type ImageFetchOptions = { maxBytes?: number; timeoutMs?: number; fetchImpl?: typeof fetch };
@@ -146,10 +183,6 @@ async function readHeadBytes(response: Response, count: number): Promise<Uint8Ar
   }
   if (filled === 0) throw new Error('EMPTY_RESPONSE');
   return head.subarray(0, filled);
-}
-
-async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
-  return new TextDecoder('utf-8', { fatal: false }).decode(await readBoundedBytes(response, maxBytes));
 }
 
 async function readBoundedBytes(response: Response, maxBytes: number): Promise<Uint8Array> {

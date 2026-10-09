@@ -123,6 +123,14 @@ async function solidPng(page: Page, color: string): Promise<{ name: string; mime
 /** The template picker button (its name includes the current template). */
 const pickerButton = (page: Page) => page.getByRole('button', { name: /^Template/ });
 
+const categorySelect = (page: Page) => page.getByLabel('Category (yellow label)', { exact: true });
+
+/** Choose Custom in the category dropdown and type a value. */
+async function customCategory(page: Page, value: string): Promise<void> {
+  await categorySelect(page).selectOption('__custom__');
+  await page.getByLabel('Your category', { exact: true }).fill(value);
+}
+
 async function pickTemplate(page: Page, name: RegExp): Promise<void> {
   await pickerButton(page).click();
   await page.getByRole('option', { name }).click();
@@ -163,20 +171,21 @@ test.describe('photocard generator', () => {
     await expectQrEncodes(page, ARTICLE_URL);
     await page.getByLabel('Headline', { exact: true }).fill('সম্পাদিত শিরোনাম');
     await expect(page.locator('.card-title')).toHaveText('সম্পাদিত শিরোনাম');
-    await page.getByLabel('Category (yellow label)').fill('রাজনীতি');
+    await categorySelect(page).selectOption('রাজনীতি');
     await expect(page.locator('.card-pill')).toHaveText('রাজনীতি');
   });
 
-  test('article mode: category pre-fills the pill and the QR encodes the canonical URL', async ({ page }) => {
-    const canonical = 'https://starnews.com.bd/division/25787/canonical-story';
+  test('article mode: category pre-fills the pill and the QR encodes the short article link', async ({ page }) => {
+    const canonical = 'https://starnews.com.bd/division/25787/canonical-story.html?utm=x#top';
     await mockArticle(page, { category: 'রংপুর', canonicalUrl: canonical });
     await generate(page);
     await expect(page.locator('.card-pill')).toHaveText('রংপুর');
-    // Pre-filled, and still an ordinary editable text field.
-    await expect(page.getByLabel('Category (yellow label)')).toHaveValue('রংপুর');
-    await page.getByLabel('Category (yellow label)').fill('রংপুর বিভাগ');
+    // Not a preset: shown as the article's own value, and still editable through Custom.
+    await expect(categorySelect(page).locator('option:checked')).toHaveText('রংপুর (from article)');
+    await customCategory(page, 'রংপুর বিভাগ');
     await expect(page.locator('.card-pill')).toHaveText('রংপুর বিভাগ');
-    await expectQrEncodes(page, canonical);
+    // Section + ID only: slug, query and hash stripped.
+    await expectQrEncodes(page, 'https://starnews.com.bd/division/25787');
   });
 
   test('post-render editing: text fields, zoom buttons, custom upload and QR toggle', async ({ page }) => {
@@ -188,7 +197,7 @@ test.describe('photocard generator', () => {
     await expect(page.locator('.card-title')).toHaveText('নতুন শিরোনাম');
     await page.getByLabel('Date', { exact: true }).fill('১২ অক্টোবর ২০২৬');
     await expect(page.locator('.card-date')).toHaveText('১২ অক্টোবর ২০২৬');
-    await page.getByLabel('Category (yellow label)').fill('খেলা');
+    await categorySelect(page).selectOption('খেলা');
     await expect(page.locator('.card-pill')).toHaveText('খেলা');
 
     // Zoom +/- composes with panning, and zooming back out re-clamps the pan.
@@ -602,6 +611,72 @@ test.describe('photocard generator', () => {
     await expect(page.locator('.card-title')).toHaveCSS('font-size', '52px');
     await expect(page.locator('.card-title')).toHaveCSS('font-weight', '600');
   });
+  test('category dropdown: presets, custom, auto vs manual, restore, all templates, export', async ({ page }) => {
+    let category: string | null = 'খেলা';
+    await page.route('**/api/article', (route) =>
+      route.fulfill({ json: { data: { canonicalUrl: ARTICLE_URL, title: 'শিরোনাম', language: 'bn', category } } }),
+    );
+    await generate(page);
+    const pill = page.locator('.card-pill');
+    // Auto category that is a preset: pre-selected.
+    await expect(categorySelect(page)).toHaveValue('খেলা');
+    await expect(pill).toHaveText('খেলা');
+    // All 17 presets plus No category and Custom are offered.
+    await expect(categorySelect(page).locator('option')).toHaveCount(17 + 2);
+    // A fresh fetch updates the auto value while nothing was chosen by hand.
+    category = 'অজানা বিভাগ';
+    await page.getByRole('button', { name: 'Generate', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Card ready');
+    await expect(categorySelect(page).locator('option:checked')).toHaveText('অজানা বিভাগ (from article)');
+    await expect(pill).toHaveText('অজানা বিভাগ');
+    // Manual preset wins over later fetches.
+    await categorySelect(page).selectOption('আইন ও আদালত');
+    await expect(pill).toHaveText('আইন ও আদালত');
+    category = 'বিশ্ব';
+    await page.getByRole('button', { name: 'Generate', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Card ready');
+    await expect(pill).toHaveText('আইন ও আদালত');
+    // Custom: typed live, keystroke by keystroke, capped at 40 characters.
+    await categorySelect(page).selectOption('__custom__');
+    const custom = page.getByLabel('Your category', { exact: true });
+    await expect(pill).toHaveCount(0); // empty custom = no label
+    await custom.pressSequentially('বিজ্ঞান ও গবেষণা');
+    await expect(pill).toHaveText('বিজ্ঞান ও গবেষণা');
+    await custom.fill('ক'.repeat(45));
+    await expect(custom).toHaveValue('ক'.repeat(40));
+    await custom.fill('প্রবাস');
+    // Restore the article's category (the latest fetched one).
+    await page.getByRole('button', { name: 'Use the article’s category' }).click();
+    await expect(categorySelect(page)).toHaveValue('বিশ্ব');
+    await expect(pill).toHaveText('বিশ্ব');
+    await expect(page.getByLabel('Your category', { exact: true })).toHaveCount(0);
+    // Available on every template; cards without a pill say so and keep the value.
+    await pickTemplate(page, /Full photo, headline on top/);
+    await expect(categorySelect(page)).toHaveValue('বিশ্ব');
+    await expect(page.locator('#photo-tag-help')).toContainText('no category label');
+    await pickTemplate(page, /Photo at bottom/);
+    await expect(pill).toHaveText('বিশ্ব');
+    // Export carries the same pill: dark text pixels inside the (baked) yellow pill zone.
+    const pillPixels = async () => {
+      const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download PNG' }).click()]);
+      const b64 = (await readFile((await download.path())!)).toString('base64');
+      return page.evaluate(async (src) => {
+        const img = new Image(); img.src = src; await img.decode();
+        const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+        const g = c.getContext('2d')!; g.drawImage(img, 0, 0);
+        // Photo-at-bottom pill zone in 1600-space: x 681-916, y 141-213.
+        const d = g.getImageData(690, 150, 220, 55).data;
+        let dark = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i]! + d[i + 1]! + d[i + 2]! < 200) dark += 1;
+        return dark;
+      }, `data:image/png;base64,${b64}`);
+    };
+    expect(await pillPixels()).toBeGreaterThan(50);
+    await categorySelect(page).selectOption('');
+    await expect(pill).toHaveCount(0);
+    expect(await pillPixels()).toBe(0);
+  });
+
   test('successive articles replace automatic categories and preserve manual overrides', async ({ page }) => {
     let category = 'Sports';
     await page.route('**/api/article', route => route.fulfill({ json: { data: { canonicalUrl: ARTICLE_URL, title: 'Short headline', language: 'bn', category } } }));
@@ -609,7 +684,7 @@ test.describe('photocard generator', () => {
     category = 'Politics';
     await page.getByRole('button', { name: 'Generate', exact: true }).click();
     await expect(page.locator('.card-pill')).toHaveText('Politics');
-    await page.getByLabel('Category (yellow label)').fill('Manual');
+    await customCategory(page, 'Manual');
     category = 'Economy';
     await page.getByRole('button', { name: 'Generate', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Card ready');
