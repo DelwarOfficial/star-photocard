@@ -2,11 +2,14 @@ import type { APIRoute } from 'astro';
 import { z } from 'zod';
 import { extractArticle } from '../../lib/article/extractArticle';
 import { normalizeArticleUrl } from '../../lib/article/normalizeArticleUrl';
-import { fetchArticleHtml, fetchImageBytes } from '../../lib/security/boundedFetch';
-import { hashedArticleCacheKey, matchCache, putCache } from '../../lib/security/cacheKey';
-import { signImageUrl } from '../../lib/security/imageToken';
+import { fetchArticleHtml, probeImage } from '../../lib/security/boundedFetch';
+import { hashedArticleCacheKey, matchCache, putCache, ttlSeconds } from '../../lib/security/cacheKey';
+import { imageTokenTtlSeconds, signImageUrl } from '../../lib/security/imageToken';
 
 export const prerender = false;
+
+const MAX_IMAGE_PROBES = 4;
+const IMAGE_PROBE_TIMEOUT_MS = 5_000;
 
 const requestSchema = z.object({ url: z.string().trim().min(1).max(2048) }).strict();
 
@@ -100,12 +103,12 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
     const fetched = await fetchArticleHtml(startUrl);
     const article = extractArticle(fetched.html, fetched.url);
 
-    // Validate image candidates in order; first downloadable wins (recoverable failures continue).
+    // Probe image candidates in order (headers + magic bytes only); first valid wins.
+    // /api/image does the full bounded download when the client requests it.
     let imageUrl: string | undefined;
-    for (const candidate of article.imageCandidates.slice(0, 8)) {
+    for (const candidate of article.imageCandidates.slice(0, MAX_IMAGE_PROBES)) {
       try {
-        const imageResult = await fetchImageBytes(new URL(candidate));
-        void imageResult;
+        await probeImage(new URL(candidate), { timeoutMs: IMAGE_PROBE_TIMEOUT_MS });
         if (secret.length >= 32) {
           const token = await signImageUrl(candidate, secret);
           imageUrl = `/api/image?token=${encodeURIComponent(token)}`;
@@ -129,12 +132,14 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
       ...(imageUrl ? { imageUrl } : {}),
     };
 
+    // Cached payloads carry a signed image link; never cache longer than that link lives.
+    const articleCacheTtl = Math.min(ttlSeconds(workerEnv.ARTICLE_CACHE_TTL_SECONDS, 300), imageTokenTtlSeconds());
     if (cache) {
       await putCache(
         cache,
         cacheKey,
         new Response(JSON.stringify({ data }), {
-          headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=300' },
+          headers: { 'content-type': 'application/json', 'cache-control': `public, max-age=${articleCacheTtl}` },
         }),
       );
     }

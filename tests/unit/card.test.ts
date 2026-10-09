@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { CARD_HEIGHT, CARD_WIDTH, templates } from '../../src/config/templates';
 import { coverGeometry, clampPhotoOffset, clampToCanvas, previewScale } from '../../src/lib/card/geometry';
@@ -118,10 +120,10 @@ describe('dates', () => {
 });
 
 describe('template registry', () => {
-  it('ships four square templates with layers inside the canvas', () => {
+  it('ships square templates with layers inside the canvas', () => {
     expect(CARD_WIDTH).toBe(1080);
     expect(CARD_HEIGHT).toBe(1080);
-    expect(templates.map((t) => t.id)).toEqual(['common-card', 'digital-card', 'just-in', 'entertainment']);
+    expect(templates.map((t) => t.id)).toEqual(['common-card', 'just-in']);
     for (const template of templates) {
       expect(template.canvas).toEqual({ width: 1080, height: 1080 });
       expect(template.photo.x + template.photo.width).toBeLessThanOrEqual(1080);
@@ -133,6 +135,13 @@ describe('template registry', () => {
       expect(template.title.defaultFontSize).toBeLessThanOrEqual(template.title.maxFontSize);
     }
   });
+  it('points every template and thumbnail at a shipped asset', () => {
+    for (const template of templates) {
+      for (const path of [template.src, template.thumbnail]) {
+        expect(existsSync(fileURLToPath(new URL(`../../public${path}`, import.meta.url))), path).toBe(true);
+      }
+    }
+  });
 });
 
 describe('reducer', () => {
@@ -140,6 +149,7 @@ describe('reducer', () => {
     let state = initialCardState;
     state = cardReducer(state, {
       type: 'GENERATE_SUCCESS',
+      articleUrl: 'https://www.starnews.com.bd/a',
       title: 'Hello',
       publicationDate: '৪ সেপ্টেম্বর ২০২৬',
       language: 'bn',
@@ -152,9 +162,19 @@ describe('reducer', () => {
     expect(state.fontSize).toBe(120);
     state = cardReducer(state, { type: 'SET_IMAGE_SCALE', scale: 99 });
     expect(state.imageScale).toBe(3);
-    state = cardReducer(state, { type: 'SWITCH_TEMPLATE', templateId: 'digital-card' });
-    expect(state.templateId).toBe('digital-card');
+    state = cardReducer(state, { type: 'SWITCH_TEMPLATE', templateId: 'just-in' });
+    expect(state.templateId).toBe('just-in');
     expect(state.title).toBe('Hello'); // content preserved
+    expect(state.articleUrl).toBe('https://www.starnews.com.bd/a');
+    // Layout follows the new template's geometry.
+    const justIn = templates.find((t) => t.id === 'just-in')!;
+    expect(state.titlePosition).toEqual({ x: justIn.title.x, y: justIn.title.y });
+    expect(state.qrPosition).toEqual({ x: justIn.qr.x, y: justIn.qr.y });
+    expect(state.fontSize).toBe(justIn.title.maxFontSize);
+    expect(state.imageScale).toBe(1);
+    state = cardReducer(state, { type: 'GENERATE_START' });
+    state = cardReducer(state, { type: 'GENERATE_ERROR' });
+    expect(state.title).toBe('Hello'); // failed refetch keeps the composition
     state = cardReducer(state, { type: 'RESET_LAYOUT' });
     expect(state.imageScale).toBe(1);
     state = cardReducer(state, { type: 'FULL_RESET' });

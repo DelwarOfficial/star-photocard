@@ -62,10 +62,36 @@ export async function fetchArticleHtml(
   throw new Error('REDIRECT_REJECTED');
 }
 
-export async function fetchImageBytes(
+type ImageFetchOptions = { maxBytes?: number; timeoutMs?: number; fetchImpl?: typeof fetch };
+
+export async function fetchImageBytes(startUrl: URL, options: ImageFetchOptions = {}): Promise<FetchedImage> {
+  const maxBytes = options.maxBytes ?? IMAGE_MAX_BYTES;
+  const { response, rawType, url } = await openImage(startUrl, options);
+  const bytes = await readBoundedBytes(response, maxBytes);
+  const verified = verifyImageSignature(bytes, rawType);
+  if (!verified) throw new Error('UNSUPPORTED_IMAGE');
+  return { bytes, contentType: verified, url };
+}
+
+/** Bytes needed to recognise every allowed image signature. */
+const SIGNATURE_BYTES = 12;
+
+/**
+ * Cheap candidate check: same redirect/host/MIME/size policy as fetchImageBytes,
+ * but reads only the magic bytes and cancels the rest of the body. /api/image
+ * still performs the full bounded download and verification when serving.
+ */
+export async function probeImage(startUrl: URL, options: ImageFetchOptions = {}): Promise<URL> {
+  const { response, rawType, url } = await openImage(startUrl, options);
+  const head = await readHeadBytes(response, SIGNATURE_BYTES);
+  if (!verifyImageSignature(head, rawType)) throw new Error('UNSUPPORTED_IMAGE');
+  return url;
+}
+
+async function openImage(
   startUrl: URL,
-  options: { maxBytes?: number; timeoutMs?: number; fetchImpl?: typeof fetch } = {},
-): Promise<FetchedImage> {
+  options: ImageFetchOptions,
+): Promise<{ response: Response; rawType: string; url: URL }> {
   const maxBytes = options.maxBytes ?? IMAGE_MAX_BYTES;
   const timeoutMs = options.timeoutMs ?? FETCH_TIMEOUT_MS;
   const fetchImpl = options.fetchImpl ?? fetch;
@@ -95,12 +121,31 @@ export async function fetchImageBytes(
       await response.body?.cancel().catch(() => undefined);
       throw new Error('RESPONSE_TOO_LARGE');
     }
-    const bytes = await readBoundedBytes(response, maxBytes);
-    const verified = verifyImageSignature(bytes, rawType);
-    if (!verified) throw new Error('UNSUPPORTED_IMAGE');
-    return { bytes, contentType: verified, url };
+    return { response, rawType, url };
   }
   throw new Error('REDIRECT_REJECTED');
+}
+
+async function readHeadBytes(response: Response, count: number): Promise<Uint8Array> {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('EMPTY_RESPONSE');
+  const head = new Uint8Array(count);
+  let filled = 0;
+  try {
+    while (filled < count) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      const take = Math.min(value.byteLength, count - filled);
+      head.set(value.subarray(0, take), filled);
+      filled += take;
+    }
+    await reader.cancel().catch(() => undefined);
+  } finally {
+    reader.releaseLock();
+  }
+  if (filled === 0) throw new Error('EMPTY_RESPONSE');
+  return head.subarray(0, filled);
 }
 
 async function readBoundedText(response: Response, maxBytes: number): Promise<string> {

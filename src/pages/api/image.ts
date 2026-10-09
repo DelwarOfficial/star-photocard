@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro';
 import { z } from 'zod';
 import { isStarNewsHost } from '../../lib/article/normalizeArticleUrl';
 import { fetchImageBytes } from '../../lib/security/boundedFetch';
-import { hashedImageCacheKey, matchCache, putCache } from '../../lib/security/cacheKey';
+import { hashedImageCacheKey, matchCache, putCache, ttlSeconds } from '../../lib/security/cacheKey';
 import { verifyImageToken } from '../../lib/security/imageToken';
 
 export const prerender = false;
@@ -64,7 +64,7 @@ export const GET: APIRoute = async ({ request }) => {
     const response = new Response(body, {
       headers: {
         'content-type': result.contentType,
-        'cache-control': 'public, max-age=900',
+        'cache-control': `public, max-age=${ttlSeconds(workerEnv.IMAGE_CACHE_TTL_SECONDS, 900)}`,
         'content-length': String(body.byteLength),
         'x-content-type-options': 'nosniff',
       },

@@ -8,7 +8,7 @@ import {
   normalizeImageUrl,
 } from '../../src/lib/article/extractArticle';
 import { isRtvHost, isStarNewsHost, normalizeArticleUrl, resolveRedirect } from '../../src/lib/article/normalizeArticleUrl';
-import { fetchArticleHtml, fetchImageBytes, verifyImageSignature } from '../../src/lib/security/boundedFetch';
+import { fetchArticleHtml, fetchImageBytes, probeImage, verifyImageSignature } from '../../src/lib/security/boundedFetch';
 import { signImageUrl, verifyImageToken } from '../../src/lib/security/imageToken';
 
 describe('Star News URL policy', () => {
@@ -36,6 +36,7 @@ describe('Star News URL policy', () => {
     const current = new URL('https://www.starnews.com.bd/a');
     expect(() => resolveRedirect(current, 'https://evil.test/x')).toThrow();
     expect(() => resolveRedirect(current, 'http://www.starnews.com.bd/x')).toThrow();
+    expect(() => resolveRedirect(current, 'https://user:pw@www.starnews.com.bd/x')).toThrow('REDIRECT_REJECTED');
     expect(resolveRedirect(current, '/english/x').href).toBe('https://www.starnews.com.bd/english/x');
   });
 });
@@ -60,6 +61,10 @@ describe('article extraction', () => {
     ].join('');
     expect(extractArticle(html, new URL('https://www.starnews.com.bd/x')).title).toBe('OG Title');
     expect(cleanTitle('A &amp; B | Star News')).toBe('A & B');
+    expect(cleanTitle('শিরোনাম | স্টার নিউজ')).toBe('শিরোনাম');
+    expect(cleanTitle('Headline - The Star News')).toBe('Headline');
+    // A pipe that is part of the headline is kept.
+    expect(cleanTitle('Budget 2026 | What changes for you')).toBe('Budget 2026 | What changes for you');
   });
 
   it('supports nested and @graph JSON-LD dates', () => {
@@ -178,6 +183,42 @@ describe('bounded fetch', () => {
     await expect(
       fetchImageBytes(new URL('https://www.starnews.com.bd/a.png'), { fetchImpl: badFetch as typeof fetch }),
     ).rejects.toThrow('UNSUPPORTED_IMAGE');
+  });
+
+  it('probes only the image head and cancels the rest of the body', async () => {
+    const pngHead = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0];
+    let pulls = 0;
+    let cancelled = false;
+    const streamFetch = vi.fn(async () => {
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          pulls += 1;
+          // First chunk carries the signature; later chunks would be the (large) remainder.
+          controller.enqueue(pulls === 1 ? new Uint8Array([...pngHead, 1, 2, 3]) : new Uint8Array(64 * 1024));
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+      return new Response(body, { status: 200, headers: { 'content-type': 'image/png' } });
+    });
+    const url = await probeImage(new URL('https://www.starnews.com.bd/a.png'), {
+      fetchImpl: streamFetch as typeof fetch,
+    });
+    expect(url.href).toBe('https://www.starnews.com.bd/a.png');
+    expect(cancelled).toBe(true);
+    expect(pulls).toBeLessThanOrEqual(2);
+
+    const textFetch = vi.fn(
+      async () => new Response(new Uint8Array(16).fill(1), { status: 200, headers: { 'content-type': 'image/png' } }),
+    );
+    await expect(
+      probeImage(new URL('https://www.starnews.com.bd/a.png'), { fetchImpl: textFetch as typeof fetch }),
+    ).rejects.toThrow('UNSUPPORTED_IMAGE');
+    const offHost = vi.fn(async () => new Response(null, { status: 302, headers: { location: 'https://evil.test/x.png' } }));
+    await expect(
+      probeImage(new URL('https://www.starnews.com.bd/a.png'), { fetchImpl: offHost as typeof fetch }),
+    ).rejects.toThrow('REDIRECT_REJECTED');
   });
 });
 

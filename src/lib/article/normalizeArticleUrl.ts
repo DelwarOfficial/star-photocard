@@ -43,6 +43,7 @@ export function resolveRedirect(current: URL, location: string): URL {
     throw new Error('REDIRECT_REJECTED');
   }
   if (next.protocol !== 'https:') throw new Error('REDIRECT_REJECTED');
+  if (next.username || next.password) throw new Error('REDIRECT_REJECTED');
   next.hostname = normalizeHostname(next.hostname);
   if (!isStarNewsHost(next.hostname)) throw new Error('REDIRECT_REJECTED');
   next.hash = '';

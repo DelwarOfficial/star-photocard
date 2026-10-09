@@ -15,6 +15,7 @@ export type ArticleData = {
 const ARTICLE_TYPES = new Set(['article', 'newsarticle', 'reportagenewsarticle', 'blogposting']);
 const MAX_JSON_NODES = 500;
 const MAX_JSON_DEPTH = 8;
+const PUBLISHER_SUFFIX = /\s*[|\-–—]\s*(?:the\s+)?(?:star\s*news(?:\.com\.bd)?|starnews\.com\.bd|স্টার\s*নিউজ)\s*$/iu;
 
 export function extractArticle(html: string, url: URL, now = new Date()): ArticleData {
   const language = detectLanguage(html, url);
@@ -44,8 +45,9 @@ export function extractTitle(html: string): string {
 
 export function cleanTitle(raw: string): string {
   const decoded = decodeEntities(raw);
-  // Remove publisher suffix ("Headline | Star News") — legacy behavior.
-  const withoutSuffix = decoded.replace(/\s*\|[^|]*$/u, '').trim();
+  // Remove only the publisher suffix ("Headline | Star News"); a "|" inside the
+  // headline itself is editorial content and must survive.
+  const withoutSuffix = decoded.replace(PUBLISHER_SUFFIX, '').trim();
   // Preserve newlines, collapse other whitespace runs minimally, strip controls.
   return withoutSuffix
     .replace(/\r\n?/g, '\n')

@@ -1,6 +1,7 @@
 import html2canvas from 'html2canvas';
 import { getTemplate } from '../../config/templates';
 import { coverGeometry } from './geometry';
+import { tokenizeTitle } from './highlightTitle';
 import { decodeImage, waitForFonts, type CardRenderer, type ExportSnapshot } from './renderer';
 
 /**
@@ -8,16 +9,40 @@ import { decodeImage, waitForFonts, type CardRenderer, type ExportSnapshot } fro
  * Uses the shared cover-geometry function instead of object-fit + transforms
  * so preview, bounds and export agree. Animated GIF input exports its decoded
  * first frame (browser decoding behavior); documented in README.
+ *
+ * Text layers must mirror the preview (.card-title / .highlight in
+ * global.css): same brand font family, weights and highlight colour.
  */
+const HIGHLIGHT_COLOR = '#ff0';
+
+function cardFontFamily(language: string): string {
+  return language === 'en' ? 'StarEnglish' : 'StarBangla';
+}
+
+async function loadCardFonts(family: string): Promise<void> {
+  try {
+    // The off-screen export DOM may use faces the page never requested; load them explicitly.
+    await Promise.all([document.fonts.load(`900 60px ${family}`), document.fonts.load(`700 30px ${family}`)]);
+  } catch {
+    // Font loading is best-effort; fonts.ready still runs below.
+  }
+}
 export class Html2CanvasRenderer implements CardRenderer {
   readonly name = 'html2canvas';
 
   async render(snapshot: ExportSnapshot): Promise<Blob> {
+    const fontFamily = cardFontFamily(snapshot.state.language);
+    await loadCardFonts(fontFamily);
     await waitForFonts();
-    // Decode assets before snapshotting so export is deterministic.
+    // Decode assets before snapshotting so export is deterministic. Never swap in a
+    // different photo: a news card with the wrong image must fail loudly instead.
     const [templateImg, photoImg] = await Promise.all([
-      decodeImage(snapshot.templateSrc),
-      decodeImage(snapshot.photoSrc).catch(() => decodeImage('/photos/default-news.jpg')),
+      decodeImage(snapshot.templateSrc).catch(() => {
+        throw new Error('TEMPLATE_UNAVAILABLE');
+      }),
+      decodeImage(snapshot.photoSrc).catch(() => {
+        throw new Error('PHOTO_UNAVAILABLE');
+      }),
     ]);
     if (snapshot.qrDataUrl) {
       await decodeImage(snapshot.qrDataUrl).catch(() => undefined);
@@ -34,7 +59,7 @@ export class Html2CanvasRenderer implements CardRenderer {
     try {
       container.innerHTML = '';
       const card = document.createElement('div');
-      card.style.cssText = `position:relative;width:${canvasWidth}px;height:${canvasHeight}px;overflow:hidden;background:#fff;`;
+      card.style.cssText = `position:relative;width:${canvasWidth}px;height:${canvasHeight}px;overflow:hidden;background:#fff;font-family:${fontFamily},serif;`;
       container.appendChild(card);
 
       // Photo layer with explicit cover geometry.
@@ -78,7 +103,16 @@ export class Html2CanvasRenderer implements CardRenderer {
 
       const title = document.createElement('div');
       title.style.cssText = `position:absolute;left:${snapshot.state.titlePosition.x}px;top:${snapshot.state.titlePosition.y}px;width:${template.title.width}px;text-align:center;color:#fff;font-weight:900;line-height:1.3;font-size:${snapshot.state.fontSize}px;text-shadow:2px 2px 5px rgba(0,0,0,.6);white-space:pre-line;`;
-      title.textContent = snapshot.state.title.replace(/\*([^*]+)\*/g, '$1');
+      for (const line of tokenizeTitle(snapshot.state.title)) {
+        const lineEl = document.createElement('div');
+        for (const token of line) {
+          const span = document.createElement('span');
+          span.textContent = token.text;
+          if (token.highlighted) span.style.color = HIGHLIGHT_COLOR;
+          lineEl.appendChild(span);
+        }
+        title.appendChild(lineEl);
+      }
       card.appendChild(title);
 
       if (snapshot.state.qrVisible && snapshot.qrDataUrl) {

@@ -4,6 +4,8 @@ export type ImageKind = 'fallback' | 'remote' | 'local';
 
 export type CardState = Readonly<{
   sourceUrl: string;
+  /** Canonical URL of the last successfully fetched article; the QR encodes this, never raw input. */
+  articleUrl: string;
   title: string;
   publicationDate: string;
   language: Language;
@@ -24,6 +26,7 @@ export const FALLBACK_IMAGE_SRC = '/photos/default-news.jpg';
 
 export const initialCardState: CardState = {
   sourceUrl: '',
+  articleUrl: '',
   title: '',
   publicationDate: '',
   language: defaultTemplate.language,

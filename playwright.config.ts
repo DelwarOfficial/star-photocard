@@ -18,7 +18,8 @@ export default defineConfig({
     ? {}
     : {
         webServer: {
-          command: 'npm run preview',
+          // Pin the port: bare `wrangler dev` listens on 8787, not the 8788 waited on below.
+          command: 'npm run build && npx wrangler dev --ip 127.0.0.1 --port 8788',
           url: 'http://127.0.0.1:8788',
           reuseExistingServer: !process.env.CI,
           timeout: 120_000,

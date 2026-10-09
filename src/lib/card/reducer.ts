@@ -6,6 +6,7 @@ export type CardAction =
   | Readonly<{ type: 'GENERATE_START' }>
   | Readonly<{
       type: 'GENERATE_SUCCESS';
+      articleUrl: string;
       title: string;
       publicationDate: string;
       language: CardState['language'];
@@ -50,6 +51,7 @@ export function cardReducer(state: CardState, action: CardAction): CardState {
     case 'GENERATE_SUCCESS':
       return {
         ...state,
+        articleUrl: action.articleUrl,
         title: action.title,
         publicationDate: action.publicationDate,
         language: action.language,
@@ -97,8 +99,18 @@ export function cardReducer(state: CardState, action: CardAction): CardState {
         isDirty: true,
       };
     case 'SWITCH_TEMPLATE': {
+      // Layer positions are template-specific; carrying them over misplaces layers.
       const template = getTemplate(action.templateId);
-      return { ...state, templateId: template.id, isDirty: true };
+      return {
+        ...state,
+        templateId: template.id,
+        fontSize: Math.min(state.fontSize, template.title.maxFontSize),
+        imageScale: 1,
+        photoPosition: { x: 0, y: 0 },
+        titlePosition: { x: template.title.x, y: template.title.y },
+        qrPosition: { x: template.qr.x, y: template.qr.y },
+        isDirty: true,
+      };
     }
     case 'RESET_LAYOUT': {
       const template = getTemplate(state.templateId);

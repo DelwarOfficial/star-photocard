@@ -4,7 +4,10 @@ import { defineConfig } from 'astro/config';
 
 export default defineConfig({
   output: 'server',
-  adapter: cloudflare(),
+  // Stateless app: no Astro sessions or image transforms, so the adapter must not
+  // inject (and auto-provision) SESSION KV or IMAGES bindings on deploy.
+  adapter: cloudflare({ imageService: 'passthrough' }),
+  session: false,
   integrations: [react()],
   security: { checkOrigin: true },
 });

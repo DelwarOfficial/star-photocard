@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.12.0", "npm": ">=9.6.5" },
+  "engines": {
+    "node": ">=22.12.0",
+    "npm": ">=9.6.5"
+  },
   "scripts": {
     "dev": "astro dev",
     "check": "astro check",
@@ -16,9 +19,9 @@
     "cf-typegen": "wrangler types"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "14.3.3",
-    "@astrojs/react": "7.0.0",
-    "astro": "7.3.5",
+    "@astrojs/cloudflare": "14.3.4",
+    "@astrojs/react": "7.0.1",
+    "astro": "7.3.8",
     "html2canvas": "1.4.1",
     "qrcode": "1.5.4",
     "react": "19.3.0",
@@ -27,7 +30,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "0.9.10",
-    "@cloudflare/workers-types": "5.20261004.1",
+    "@cloudflare/workers-types": "5.20261009.1",
     "@playwright/test": "1.63.0",
     "@types/node": "26.6.4",
     "@types/qrcode": "1.5.6",
@@ -35,6 +38,6 @@
     "@types/react-dom": "19.3.0",
     "typescript": "6.0.3",
     "vitest": "5.0.3",
-    "wrangler": "4.147.0"
+    "wrangler": "4.149.0"
   }
 }

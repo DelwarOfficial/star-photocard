@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { getTemplate, templates } from '../../config/templates';
+import { CARD_HEIGHT, getTemplate, templates } from '../../config/templates';
 import { titleFontSize, tokenizeTitle } from '../../lib/card/highlightTitle';
 import { defaultRenderer } from '../../lib/card/html2canvasRenderer';
 import { clampPhotoOffset, clampToCanvas, previewScale } from '../../lib/card/geometry';
@@ -39,6 +39,15 @@ function validateSourceUrl(raw: string): string | null {
   return null;
 }
 
+function exportFailureMessage(err: unknown, action: 'Download' | 'Copy'): string {
+  const code = err instanceof Error ? err.message : '';
+  if (code === 'PHOTO_UNAVAILABLE') {
+    return 'The card photo could not be loaded (article image links expire after 10 minutes). Click Generate again or choose a local image, then retry.';
+  }
+  if (code === 'TEMPLATE_UNAVAILABLE') return 'The template artwork could not be loaded. Pick another template or reload the page.';
+  return `Export failed. Check the image and try ${action} again.`;
+}
+
 export default function PhotocardEditor() {
   const [card, dispatch] = useReducer(cardReducer, initialCardState);
   const [status, setStatus] = useState<{ tone: StatusTone; text: string }>({
@@ -55,10 +64,17 @@ export default function PhotocardEditor() {
   const abortRef = useRef<AbortController | null>(null);
   const localUrlRef = useRef<string | undefined>(undefined);
   const previewFrameRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLDivElement>(null);
+  // Real rendered title height (card px; CSS transforms do not affect offsetHeight) for drag bounds.
+  const titleHeight = (): number => Math.min(CARD_HEIGHT, titleRef.current?.offsetHeight || card.fontSize * 1.3);
   const [previewWidth, setPreviewWidth] = useState(540);
 
   const template = useMemo(() => getTemplate(card.templateId), [card.templateId]);
   const titleLines = useMemo(() => tokenizeTitle(card.title), [card.title]);
+  // Intrinsic size of the displayed photo; drag bounds must use the same cover math as export.
+  const [photoSize, setPhotoSize] = useState({ width: 1920, height: 1080 });
+  // A finished composition stays exportable after a failed or cancelled refetch.
+  const canExport = card.loadStatus !== 'loading' && card.title.trim() !== '';
   const scale = useMemo(() => previewScale(previewWidth, Number.POSITIVE_INFINITY), [previewWidth]);
   // Computed after mount so SSR and first client render agree (avoids hydration mismatch).
   const [clipboardSupported, setClipboardSupported] = useState(false);
@@ -79,12 +95,12 @@ export default function PhotocardEditor() {
   }, []);
 
   useEffect(() => {
-    if (!card.sourceUrl || !card.qrVisible) {
+    if (!card.articleUrl || !card.qrVisible) {
       setQrDataUrl('');
       return;
     }
     let cancelled = false;
-    QRCode.toDataURL(card.sourceUrl, { errorCorrectionLevel: 'M', margin: 0, width: 240 })
+    QRCode.toDataURL(card.articleUrl, { errorCorrectionLevel: 'M', margin: 0, width: 240 })
       .then((url) => {
         if (!cancelled) setQrDataUrl(url);
       })
@@ -94,7 +110,7 @@ export default function PhotocardEditor() {
     return () => {
       cancelled = true;
     };
-  }, [card.sourceUrl, card.qrVisible]);
+  }, [card.articleUrl, card.qrVisible]);
 
   useEffect(
     () => () => {
@@ -147,6 +163,7 @@ export default function PhotocardEditor() {
       setLastRemoteImage({ src: imageSrc, kind: imageKind });
       dispatch({
         type: 'GENERATE_SUCCESS',
+        articleUrl: data.canonicalUrl,
         title: data.title,
         publicationDate: data.formattedDate,
         language: data.language,
@@ -243,7 +260,7 @@ export default function PhotocardEditor() {
     (layer: 'photo' | 'title' | 'qr', dx: number, dy: number) => {
       if (layer === 'photo') {
         const next = clampPhotoOffset(
-          { width: 1920, height: 1080 },
+          photoSize,
           template.photo,
           card.imageScale,
           { x: card.photoPosition.x + dx, y: card.photoPosition.y + dy },
@@ -252,7 +269,7 @@ export default function PhotocardEditor() {
       } else if (layer === 'title') {
         const next = clampToCanvas(
           { x: card.titlePosition.x + dx, y: card.titlePosition.y + dy },
-          { width: template.title.width, height: 120 },
+          { width: template.title.width, height: titleHeight() },
         );
         dispatch({ type: 'SET_TITLE_POSITION', position: next });
       } else {
@@ -263,7 +280,7 @@ export default function PhotocardEditor() {
         dispatch({ type: 'SET_QR_POSITION', position: next });
       }
     },
-    [card.imageScale, card.photoPosition, card.qrPosition, card.titlePosition, template],
+    [card.imageScale, card.photoPosition, card.qrPosition, card.titlePosition, photoSize, template],
   );
 
   const onLayerKeyDown = useCallback(
@@ -297,7 +314,7 @@ export default function PhotocardEditor() {
   }, [card, template.src, qrDataUrl]);
 
   const download = useCallback(async () => {
-    if (card.loadStatus !== 'ready') return;
+    if (!canExport) return;
     setExporting('download');
     try {
       const blob = await exportBlob();
@@ -313,22 +330,29 @@ export default function PhotocardEditor() {
       } finally {
         setTimeout(() => URL.revokeObjectURL(url), 5000);
       }
-    } catch {
-      announce('error', 'Export failed. Check the image and try Download again.');
+    } catch (err) {
+      announce('error', exportFailureMessage(err, 'Download'));
     } finally {
       setExporting('idle');
     }
-  }, [card.loadStatus, exportBlob, announce]);
+  }, [canExport, exportBlob, announce]);
 
   const copy = useCallback(async () => {
-    if (card.loadStatus !== 'ready') return;
+    if (!canExport) return;
     if (!isClipboardSupported()) {
       announce('warning', 'Copy needs a secure (HTTPS) browser with ClipboardItem support. Use Download PNG instead.');
       return;
     }
     setExporting('copy');
+    let blob: Blob;
     try {
-      const blob = await exportBlob();
+      blob = await exportBlob();
+    } catch (err) {
+      announce('error', exportFailureMessage(err, 'Copy'));
+      setExporting('idle');
+      return;
+    }
+    try {
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
       announce('success', 'Card copied as a PNG image. You can paste it into your newsroom workflow.');
     } catch {
@@ -336,9 +360,8 @@ export default function PhotocardEditor() {
     } finally {
       setExporting('idle');
     }
-  }, [card.loadStatus, exportBlob, announce]);
+  }, [canExport, exportBlob, announce]);
 
-  const ready = card.loadStatus === 'ready';
   const loading = card.loadStatus === 'loading';
 
   return (
@@ -635,7 +658,7 @@ export default function PhotocardEditor() {
                 <button
                   type="button"
                   className="button primary"
-                  disabled={!ready || exporting !== 'idle'}
+                  disabled={!canExport || exporting !== 'idle'}
                   onClick={() => void download()}
                 >
                   {exporting === 'download' ? 'Exporting…' : 'Download PNG'}
@@ -643,7 +666,7 @@ export default function PhotocardEditor() {
                 <button
                   type="button"
                   className="button secondary"
-                  disabled={!ready || exporting !== 'idle'}
+                  disabled={!canExport || exporting !== 'idle'}
                   onClick={() => void copy()}
                   title={
                     clipboardSupported
@@ -669,6 +692,7 @@ export default function PhotocardEditor() {
           <div className="preview-frame" ref={previewFrameRef}>
             <div
               className={`card ${card.language === 'bn' ? 'bangla' : 'english'}`}
+              lang={card.language}
               style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}
             >
               <DraggableLayer
@@ -677,7 +701,7 @@ export default function PhotocardEditor() {
                 scale={scale}
                 onMove={(dx, dy) => {
                   const next = clampPhotoOffset(
-                    { width: 1920, height: 1080 },
+                    photoSize,
                     template.photo,
                     card.imageScale,
                     { x: card.photoPosition.x + dx, y: card.photoPosition.y + dy },
@@ -700,6 +724,12 @@ export default function PhotocardEditor() {
                     src={card.image.src}
                     alt=""
                     draggable={false}
+                    onLoad={(e) => {
+                      const { naturalWidth, naturalHeight } = e.currentTarget;
+                      if (naturalWidth > 0 && naturalHeight > 0) {
+                        setPhotoSize({ width: naturalWidth, height: naturalHeight });
+                      }
+                    }}
                     style={{
                       transform: `translate(${card.photoPosition.x}px, ${card.photoPosition.y}px) scale(${card.imageScale})`,
                     }}
@@ -738,7 +768,7 @@ export default function PhotocardEditor() {
                 onMove={(dx, dy) => {
                   const next = clampToCanvas(
                     { x: card.titlePosition.x + dx, y: card.titlePosition.y + dy },
-                    { width: template.title.width, height: 120 },
+                    { width: template.title.width, height: titleHeight() },
                   );
                   dispatch({ type: 'SET_TITLE_POSITION', position: next });
                 }}
@@ -746,6 +776,7 @@ export default function PhotocardEditor() {
               >
                 <div
                   className="card-title"
+                  ref={titleRef}
                   style={{
                     left: card.titlePosition.x,
                     top: card.titlePosition.y,
@@ -860,7 +891,7 @@ function DraggableLayer(props: {
   const start = useRef<{ x: number; y: number } | null>(null);
   return (
     <div
-      role="application"
+      role="group"
       aria-label={`${props.label}. Use arrow keys to nudge.`}
       tabIndex={0}
       className="drag-layer"

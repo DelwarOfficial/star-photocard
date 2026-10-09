@@ -32,3 +32,9 @@ export async function putCache(cache: Cache, key: string, response: Response): P
     // Cache is best-effort; correctness must not depend on a hit.
   }
 }
+
+/** Parse a TTL var (seconds) from the Worker env; invalid or missing values use the fallback. */
+export function ttlSeconds(raw: unknown, fallback: number): number {
+  const value = typeof raw === 'string' ? Number(raw.trim()) : NaN;
+  return Number.isInteger(value) && value > 0 && value <= 86_400 ? value : fallback;
+}

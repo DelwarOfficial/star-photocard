@@ -1,6 +1,6 @@
 # Star News Photocard Generator (Astro + Cloudflare Workers)
 
-> Production migration of the RTV Photo Card Generator WordPress plugin (v5.3.4) into a Cloudflare-native Astro + TypeScript app. The legacy WordPress plugin (`rtv-photo-card.php`, `assets/`) was removed from this repository on 2026-09-05 per owner request. A backup zip is kept at `C:\Users\star\AppData\Local\Temp\opencode\legacy-plugin-backup-2026-09-05.zip`. There is no git history, so that zip is the only rollback copy.
+> Production migration of the RTV Photo Card Generator WordPress plugin (v5.3.4) into a Cloudflare-native Astro + TypeScript app. The legacy WordPress plugin (`rtv-photo-card.php`, `assets/`) was removed from this repository on 2026-09-05 per owner request. A backup zip is kept at `C:\Users\star\AppData\Local\Temp\opencode\legacy-plugin-backup-2026-09-05.zip`. Git history starts after that removal, so the zip remains the only copy of the plugin.
 
 ## Quick start
 
@@ -12,7 +12,12 @@ Requirements: Node ≥ 22.12, npm ≥ 9.6.5, a Cloudflare account for deploy/pre
 & "C:\Program Files\nodejs\npm.cmd" test         # Vitest unit + integration
 & "C:\Program Files\nodejs\npm.cmd" run build    # astro check + astro build
 & "C:\Program Files\nodejs\npm.cmd" run preview  # build + wrangler dev (Workers runtime)
+& "C:\Program Files\nodejs\npm.cmd" run test:e2e # Playwright; starts wrangler dev on 127.0.0.1:8788
 ```
+
+CI (`.github/workflows/ci.yml`) runs typecheck, unit tests and build on every push/PR, then the Playwright suite (desktop Chrome + Pixel 7) against the local Workers runtime with a throwaway signing secret.
+
+Cache lifetimes come from `ARTICLE_CACHE_TTL_SECONDS` / `IMAGE_CACHE_TTL_SECONDS` in `wrangler.jsonc` `vars`. The article TTL is capped at the 600 s signed-image-link lifetime.
 
 Copy `.dev.vars.example` to `.dev.vars` for local secrets (never commit `.dev.vars`):
 
@@ -33,7 +38,7 @@ Create the production secret with `wrangler secret put IMAGE_TOKEN_SECRET` (sepa
 - `src/pages/api/article.ts` — `POST { url }` → typed envelope with `canonicalUrl/title/publishedAt/formattedDate/dateSource/language/imageUrl?`. Rate-limits before upstream work, caches metadata ~5 min, validates image candidates in order (first downloadable wins).
 - `src/pages/api/image.ts` — `GET ?token=` verifies HMAC + expiry, then independently repeats hostname/redirect/timeout/size/MIME/signature checks. Caches validated images ~15 min. Never an open proxy.
 - `src/middleware.ts` — CSP, `nosniff`, restrictive permissions policy, `SAMEORIGIN` framing.
-- Static assets (`public/templates`, `public/fonts`, `public/images`) served through Workers Static Assets. No runtime CDN.
+- Static assets (`public/templates`, `public/fonts`, `public/photos`) served through Workers Static Assets. No runtime CDN.
 
 ## API and security notes
 
@@ -50,7 +55,7 @@ Create the production secret with `wrangler secret put IMAGE_TOKEN_SECRET` (sepa
 
 ## Parity differences (intentional)
 
-See `MIGRATION_PARITY_LEDGER.md`. Headliners: square 1080 × 1080 canvas matching the template artwork, per-template layer geometry, no Google Fonts/CDN, bounded photo drag + keyboard controls, exposed missing-date provenance, persistent status, secure-context clipboard handling, `star-news-photocard-YYYYMMDD-HHmmss.png` filenames.
+See [`docs/planning/MIGRATION_PARITY_LEDGER.md`](docs/planning/MIGRATION_PARITY_LEDGER.md). Headliners: square 1080 × 1080 canvas matching the template artwork, per-template layer geometry, no Google Fonts/CDN, bounded photo drag + keyboard controls, exposed missing-date provenance, persistent status, secure-context clipboard handling, `star-news-photocard-YYYYMMDD-HHmmss.png` filenames.
 
 ## Troubleshooting
 
