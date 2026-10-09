@@ -797,7 +797,7 @@ export default function PhotocardEditor() {
                 />
               )}
 
-              <label htmlFor="font-size-select">Headline size</label>
+              <label htmlFor="font-size-select">{S.fontSize.label}</label>
               <select id="font-size-select" value={card.fontSize} onChange={(e) => dispatch({ type: 'SET_FONT_SIZE', size: Number(e.target.value) })}>
                 {TITLE_SIZES.map((size) => <option key={size} value={size}>{size}px</option>)}
               </select>

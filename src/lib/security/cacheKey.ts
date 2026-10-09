@@ -5,10 +5,6 @@ export async function sha256Hex(input: string): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export function articleCacheKey(canonicalUrl: string): string {
-  return `article:${new URL(canonicalUrl).href}`;
-}
-
 export async function hashedArticleCacheKey(canonicalUrl: string, origin = 'https://starnews.com.bd'): Promise<string> {
   return new URL(`/__photocard-cache/article/${await sha256Hex(new URL(canonicalUrl).href)}`, origin).href;
 }

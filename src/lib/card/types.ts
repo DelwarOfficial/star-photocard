@@ -68,6 +68,3 @@ const baseCardState: CardState = {
  * constant's date is 1970 there. Components call createCardState() at render time.
  */
 export const initialCardState: CardState = createCardState();
-
-/** Backwards-compatible aliases used by the first editor slice. */
-export type LegacyCardStatus = CardState['loadStatus'];

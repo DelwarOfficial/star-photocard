@@ -1,7 +1,7 @@
 const ROOT_HOST = 'starnews.com.bd';
 
 export function isStarNewsHost(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/\.+$/u, '');
+  const host = normalizeHostname(hostname);
   return host === ROOT_HOST || host.endsWith(`.${ROOT_HOST}`);
 }
 

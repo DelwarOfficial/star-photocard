@@ -252,10 +252,6 @@ export function getTemplate(id: string): TemplateDefinition {
   return templates.find((t) => t.id === id) ?? defaultTemplate;
 }
 
-export function isTemplateId(id: string): boolean {
-  return templates.some((t) => t.id === id);
-}
-
 export function templatesForMode(mode: CardMode): readonly TemplateDefinition[] {
   return templates.filter((t) => t.mode === mode);
 }

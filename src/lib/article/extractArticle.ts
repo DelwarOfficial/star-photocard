@@ -273,8 +273,7 @@ export function normalizeImageUrl(imageUrl: unknown, articleUrl: string): string
   }
   if (parsed.protocol !== 'https:') return '';
   if (parsed.username || parsed.password) return '';
-  const host = parsed.hostname.toLowerCase().replace(/\.+$/u, '');
-  if (!(host === 'starnews.com.bd' || host.endsWith('.starnews.com.bd'))) return '';
+  if (!isStarNewsHost(parsed.hostname)) return '';
   parsed.hash = '';
   return parsed.href;
 }

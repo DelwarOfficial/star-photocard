@@ -115,12 +115,9 @@ export const S = {
     label: (zoom: string, min: number, max: number) => `Photo zoom: ${zoom}× (${min}–${max})`,
     out: 'Zoom photo out',
     in: 'Zoom photo in',
-    help: 'Zoom in, then drag the photo on the card (or use the arrows below) to move it.',
   },
   fontSize: {
-    label: (size: number) => `Headline size: ${size}px (30–120)`,
-    value: 'Headline size value',
-    presets: 'Suggested headline sizes',
+    label: 'Headline size',
   },
   layers: {
     names: { photo: 'photo', title: 'headline', qr: 'QR code' } as Record<LayerKey, string>,
