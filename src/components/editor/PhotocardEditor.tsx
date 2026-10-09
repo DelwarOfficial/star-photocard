@@ -3,7 +3,7 @@ import QRCode from 'qrcode';
 import { EXPORT_HEIGHT, EXPORT_SCALE, EXPORT_WIDTH, getTemplate, SITE_URL, type TemplateDefinition } from '../../config/templates';
 import { tokenizeTitle } from '../../lib/card/highlightTitle';
 import { defaultRenderer } from '../../lib/card/html2canvasRenderer';
-import { clampPhotoOffset, clampToCanvas, previewScale } from '../../lib/card/geometry';
+import { clampPhotoOffset, clampToCanvas, effectivePhotoFit, previewScale } from '../../lib/card/geometry';
 import { hasTag, PHOTO_CREDIT_PRESETS, PHOTO_TAG_MAX_LENGTH, PHOTO_TAG_PRESETS } from '../../lib/card/photoTag';
 import { cardReducer, type CardAction, clampZoom, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from '../../lib/card/reducer';
 import { decodeImage, downloadFilename, isClipboardSupported } from '../../lib/card/renderer';
@@ -123,6 +123,8 @@ export default function PhotocardEditor() {
   // Intrinsic size of the displayed photo; drag bounds must use the same cover math as export.
   const [photoSize, setPhotoSize] = useState({ width: 1920, height: 1080 });
   // A finished composition stays exportable after a failed or cancelled refetch.
+  // One fit for preview CSS, drag bounds and export: the template's own, unless "show whole photo".
+  const photoFit = effectivePhotoFit(template.photoFit, card.showWholePhoto);
   const needsUpload = template.requiresImage && card.image.kind !== 'local';
   const canExport = card.loadStatus !== 'loading' && card.title.trim() !== '' && !needsUpload && !headlineOverflow;
   const scale = useMemo(() => previewScale(previewWidth, Number.POSITIVE_INFINITY, template.canvas), [previewWidth, template.canvas]);
@@ -362,6 +364,7 @@ export default function PhotocardEditor() {
           template.photo,
           card.imageScale,
           { x: card.photoPosition.x + dx, y: card.photoPosition.y + dy },
+          photoFit,
         );
         dispatch({ type: 'SET_PHOTO_POSITION', position: next });
       } else if (layer === 'title') {
@@ -381,7 +384,7 @@ export default function PhotocardEditor() {
         dispatch({ type: 'SET_QR_POSITION', position: next });
       }
     },
-    [card.imageScale, card.photoPosition, card.qrPosition, card.titlePosition, photoSize, template, dispatch],
+    [card.imageScale, card.photoPosition, card.qrPosition, card.titlePosition, photoSize, photoFit, template, dispatch],
   );
 
   const onLayerKeyDown = useCallback(
@@ -472,7 +475,7 @@ export default function PhotocardEditor() {
     if (template.photo) {
       dispatch({
         type: 'SET_PHOTO_POSITION',
-        position: clampPhotoOffset(photoSize, template.photo, next, card.photoPosition),
+        position: clampPhotoOffset(photoSize, template.photo, next, card.photoPosition, photoFit),
       });
     }
   };
@@ -763,6 +766,22 @@ export default function PhotocardEditor() {
               )}
 
               {template.photo && (
+                <div className="qr-toggle">
+                  <input
+                    id="whole-photo"
+                    type="checkbox"
+                    role="switch"
+                    className="switch"
+                    checked={card.showWholePhoto}
+                    aria-describedby="whole-photo-help"
+                    onChange={(e) => dispatch({ type: 'SET_SHOW_WHOLE_PHOTO', value: e.target.checked })}
+                  />
+                  <label htmlFor="whole-photo">{S.wholePhoto.label}</label>
+                </div>
+              )}
+              {template.photo && <small id="whole-photo-help">{S.wholePhoto.help}</small>}
+
+              {template.photo && (
                 <RangeField
                   id="zoom-range"
                   label={S.zoom.label(card.imageScale.toFixed(1), ZOOM_MIN, ZOOM_MAX)}
@@ -907,6 +926,7 @@ export default function PhotocardEditor() {
                           }
                         }}
                         style={{
+                          objectFit: photoFit,
                           transform: `translate(${card.photoPosition.x}px, ${card.photoPosition.y}px) scale(${card.imageScale})`,
                         }}
                       />

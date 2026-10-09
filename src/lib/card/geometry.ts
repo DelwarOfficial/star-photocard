@@ -1,16 +1,18 @@
-import { CARD_HEIGHT, CARD_WIDTH, type Point, type Rect, type Size } from '../../config/templates';
+import { CARD_HEIGHT, CARD_WIDTH, type PhotoFit, type Point, type Rect, type Size } from '../../config/templates';
 
 const DEFAULT_CANVAS: Size = { width: CARD_WIDTH, height: CARD_HEIGHT };
 
 export type ImageGeometry = Readonly<Rect & { scale: number }>;
 
+export type { PhotoFit };
+
 /**
- * How a photo sits in its template window. `contain` (the default) shows the whole
- * image — scale-to-fit, centred, letterboxed on the card background — so nothing is
- * cropped at zoom 1. `cover` fills the window and crops the overflow.
+ * The fit actually used for a card: the template's own `photoFit`, unless the user
+ * asked to see the whole photo (no crop), which always means `contain`.
  */
-export type PhotoFit = 'contain' | 'cover';
-export const PHOTO_FIT: PhotoFit = 'contain';
+export function effectivePhotoFit(templateFit: PhotoFit, showWholePhoto: boolean): PhotoFit {
+  return showWholePhoto ? 'contain' : templateFit;
+}
 
 /**
  * Shared photo math for intrinsic image (iw, ih), viewport (x, y, vw, vh), zoom z and
@@ -21,7 +23,7 @@ export function photoGeometry(
   viewport: Rect,
   zoom = 1,
   offset: Point = { x: 0, y: 0 },
-  fit: PhotoFit = PHOTO_FIT,
+  fit: PhotoFit = 'cover',
 ): ImageGeometry {
   if (image.width <= 0 || image.height <= 0 || viewport.width <= 0 || viewport.height <= 0) {
     throw new RangeError('Image and viewport dimensions must be positive.');
@@ -69,7 +71,7 @@ export function clampPhotoOffset(
   viewport: Rect,
   zoom: number,
   offset: Point,
-  fit: PhotoFit = PHOTO_FIT,
+  fit: PhotoFit = 'cover',
 ): Point {
   const drawn = photoGeometry(image, viewport, zoom, { x: 0, y: 0 }, fit);
   const slackX = Math.abs(drawn.width - viewport.width) / 2;

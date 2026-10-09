@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { CARD_HEIGHT, CARD_WIDTH, EXPORT_HEIGHT, EXPORT_SCALE, EXPORT_WIDTH, templates, templatesForMode } from '../../src/config/templates';
-import { coverGeometry, clampPhotoOffset, clampToCanvas, previewScale } from '../../src/lib/card/geometry';
+import { coverGeometry, clampPhotoOffset, clampToCanvas, effectivePhotoFit, photoGeometry, previewScale } from '../../src/lib/card/geometry';
 import { titleFontSize, tokenizeTitle } from '../../src/lib/card/highlightTitle';
 import { normalizePhotoTag, countCodePoints } from '../../src/lib/card/photoTag';
 import { cardReducer, clampZoom, ZOOM_MAX, ZOOM_MIN } from '../../src/lib/card/reducer';
@@ -123,6 +123,37 @@ describe('dates', () => {
     expect(parseArticleDate('')).toBeNull();
     expect(parseArticleDate('2026-02-29')).toBeNull(); // 2026 is not a leap year
     expect(parseArticleDate('2024-02-29T00:00:00Z')).not.toBeNull();
+  });
+});
+
+describe('photo fit', () => {
+  it('fills every photo window by default (cover), like the reference cards', () => {
+    for (const t of templates) if (t.photo) expect(t.photoFit, t.id).toBe('cover');
+  });
+  it('"Show whole photo" forces contain on any template', () => {
+    expect(effectivePhotoFit('cover', false)).toBe('cover');
+    expect(effectivePhotoFit('cover', true)).toBe('contain');
+    expect(effectivePhotoFit('contain', false)).toBe('contain');
+  });
+  it('a landscape photo fills a tall window under cover, and is letterboxed under contain', () => {
+    const tall = { x: 0, y: 0, width: 1080, height: 1350 };
+    const photo = { width: 1600, height: 900 };
+    const cover = photoGeometry(photo, tall, 1, { x: 0, y: 0 }, 'cover');
+    expect(cover.height).toBeCloseTo(1350, 5);
+    expect(cover.y).toBeCloseTo(0, 5);
+    const contain = photoGeometry(photo, tall, 1, { x: 0, y: 0 }, 'contain');
+    expect(contain.width).toBeCloseTo(1080, 5);
+    expect(contain.height).toBeCloseTo(607.5, 5);
+    // Contain: vertical slack lets the photo move inside the window; cover: none horizontally at zoom 1.
+    expect(clampPhotoOffset(photo, tall, 1, { x: 0, y: -9999 }, 'contain').y).toBeCloseTo(-(1350 - 607.5) / 2, 5);
+    expect(clampPhotoOffset(photo, tall, 1, { x: 0, y: -9999 }, 'cover').y).toBeCloseTo(0, 10); // may be -0
+  });
+  it('toggling the fit starts the framing fresh; reset turns it off', () => {
+    let st = cardReducer(initialCardState, { type: 'SET_IMAGE_SCALE', scale: 2 });
+    st = cardReducer(st, { type: 'SET_PHOTO_POSITION', position: { x: 40, y: -30 } });
+    st = cardReducer(st, { type: 'SET_SHOW_WHOLE_PHOTO', value: true });
+    expect(st).toMatchObject({ showWholePhoto: true, imageScale: 1, photoPosition: { x: 0, y: 0 } });
+    expect(cardReducer(st, { type: 'FULL_RESET' }).showWholePhoto).toBe(false);
   });
 });
 

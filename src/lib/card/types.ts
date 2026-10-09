@@ -16,6 +16,8 @@ export type CardState = Readonly<{
   categoryEdited: boolean;
   /** Photo-credit tag text; empty = no tag. */
   photoCredit: string;
+  /** "Show whole photo (no crop)": forces `contain` regardless of the template's fit. */
+  showWholePhoto: boolean;
   fontSize: number;
   imageScale: number;
   photoPosition: Point;
@@ -54,6 +56,7 @@ const baseCardState: CardState = {
   photoTag: '',
   categoryEdited: false,
   photoCredit: '',
+  showWholePhoto: false,
   imageScale: 1,
   photoPosition: { x: 0, y: 0 },
   ...layoutDefaults(defaultTemplate),

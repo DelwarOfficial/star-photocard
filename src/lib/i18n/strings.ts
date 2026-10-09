@@ -111,6 +111,10 @@ export const S = {
     customPlaceholder: 'e.g. ছবি: সংগৃহীত',
     count: (used: number, max: number) => `${used}/${max} characters — leave it empty for no tag.`,
   },
+  wholePhoto: {
+    label: 'Show whole photo (no crop)',
+    help: 'Fits the entire photo inside the frame. Off: the photo fills the frame and edges may be cropped.',
+  },
   zoom: {
     label: (zoom: string, min: number, max: number) => `Photo zoom: ${zoom}× (${min}–${max})`,
     out: 'Zoom photo out',

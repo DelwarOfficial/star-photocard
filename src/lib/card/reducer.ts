@@ -23,6 +23,7 @@ export type CardAction =
   | Readonly<{ type: 'SET_PHOTO_CREDIT'; credit: string }>
   | Readonly<{ type: 'SET_FONT_SIZE'; size: number }>
   | Readonly<{ type: 'SET_IMAGE_SCALE'; scale: number }>
+  | Readonly<{ type: 'SET_SHOW_WHOLE_PHOTO'; value: boolean }>
   | Readonly<{ type: 'SET_PHOTO_POSITION'; position: CardState['photoPosition'] }>
   | Readonly<{ type: 'SET_TITLE_POSITION'; position: CardState['titlePosition'] }>
   | Readonly<{ type: 'SET_QR_POSITION'; position: CardState['qrPosition'] }>
@@ -88,6 +89,9 @@ export function cardReducer(state: CardState, action: CardAction): CardState {
       return { ...state, photoTag: limitTagInput(action.tag), categoryEdited: true, isDirty: true };
     case 'SET_FONT_SIZE':
       return { ...state, fontSize: clampFontSize(action.size), isDirty: true };
+    case 'SET_SHOW_WHOLE_PHOTO':
+      // Pan and zoom bounds differ between cover and contain; start the framing fresh.
+      return { ...state, showWholePhoto: action.value, imageScale: 1, photoPosition: { x: 0, y: 0 }, isDirty: true };
     case 'SET_IMAGE_SCALE':
       return { ...state, imageScale: clampZoom(action.scale), isDirty: true };
     case 'SET_PHOTO_POSITION':

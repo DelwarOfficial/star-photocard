@@ -421,6 +421,35 @@ test.describe('photocard generator', () => {
     expect(frame.y + frame.height / 2).toBeLessThan(800);
   });
 
+  test('photo fills each template window by default; "Show whole photo" letterboxes it (preview + export)', async ({ page }) => {
+    await mockArticle(page, {});
+    await generate(page);
+    // Full photo, headline at bottom: the artwork is transparent over the top ~950 artwork px.
+    await pickTemplate(page, /Full photo, headline at bottom/);
+    await page.getByLabel(/^Use your own photo/).setInputFiles(await solidPng(page, '#00c853')); // 16:10 landscape
+    const photo = page.locator('.photo');
+    await expect(photo).toHaveCSS('object-fit', 'cover');
+    const top = { x: 540, y: 30 }; // layout px, inside the window, well above a 16:10 letterbox
+    const [covered] = await exportPixels(page, [top]);
+    expect(covered![1]).toBeGreaterThan(150); // green photo reaches the top edge
+    expect(covered![0]).toBeLessThan(60);
+
+    const toggle = page.getByLabel('Show whole photo (no crop)');
+    await expect(toggle).not.toBeChecked();
+    await toggle.check();
+    await expect(photo).toHaveCSS('object-fit', 'contain');
+    await expect(page.getByText(/^Photo position:/)).toHaveText('Photo position: 0, 0 px');
+    const [letterboxed] = await exportPixels(page, [top]);
+    expect(Math.min(...letterboxed!)).toBeGreaterThan(200); // card background, not photo
+
+    // Switching templates keeps the choice; reset clears it.
+    await pickTemplate(page, /Photo on top/);
+    await expect(page.getByLabel('Show whole photo (no crop)')).toBeChecked();
+    page.once('dialog', (dialog) => void dialog.accept());
+    await page.getByRole('button', { name: 'Reset', exact: true }).click();
+    await expect(page.getByLabel('Show whole photo (no crop)')).not.toBeChecked();
+  });
+
   test(`downloads a ${CARD_W} × ${CARD_H} PNG`, async ({ page }) => {
     await mockArticle(page, {});
     await generate(page);

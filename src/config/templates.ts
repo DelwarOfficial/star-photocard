@@ -3,6 +3,9 @@ export type Point = Readonly<{ x: number; y: number }>;
 export type Rect = Readonly<Point & { width: number; height: number }>;
 export type Size = Readonly<{ width: number; height: number }>;
 
+/** `cover` fills the photo window and crops; `contain` fits the whole photo, letterboxed. */
+export type PhotoFit = 'contain' | 'cover';
+
 /** Article cards are filled from a fetched URL; custom cards are written from scratch. */
 export type CardMode = 'article' | 'custom';
 
@@ -36,6 +39,12 @@ export type TemplateDefinition = Readonly<{
   canvas: Size;
   /** Transparent photo window in the artwork; null when the card has no photo. */
   photo: Rect | null;
+  /**
+   * How the photo fills its window by default. `cover` fills it edge to edge (the
+   * reference cards) and crops overflow; `contain` shows the whole photo, letterboxed.
+   * The editor's "Show whole photo" toggle forces `contain` on any template.
+   */
+  photoFit: PhotoFit;
   /** Date text sits beside the baked calendar icon; y is the text box top. */
   date: Readonly<Point & { width: number; fontSize: number }>;
   dateAlign: 'left' | 'center';
@@ -108,6 +117,7 @@ export const templates: readonly TemplateDefinition[] = [
     requiresImage: false,
     canvas,
     photo: rect(0, 0, 1600, 964),
+    photoFit: 'cover',
     date: dateAt(1858),
     dateAlign: 'left',
     dateColor: WHITE,
@@ -132,6 +142,7 @@ export const templates: readonly TemplateDefinition[] = [
     requiresImage: false,
     canvas,
     photo: rect(0, 723, 1600, 966),
+    photoFit: 'cover',
     date: dateAt(1858),
     dateAlign: 'left',
     dateColor: WHITE,
@@ -156,6 +167,8 @@ export const templates: readonly TemplateDefinition[] = [
     requiresImage: false,
     canvas,
     photo: rect(0, 0, 1600, 2000),
+    // Full-bleed: the photo must reach every edge, as in the reference cards.
+    photoFit: 'cover',
     date: dateAt(1839),
     dateAlign: 'left',
     dateColor: WHITE,
@@ -180,6 +193,8 @@ export const templates: readonly TemplateDefinition[] = [
     requiresImage: false,
     canvas,
     photo: rect(0, 0, 1600, 2000),
+    // Full-bleed: the photo must reach every edge, as in the reference cards.
+    photoFit: 'cover',
     date: dateAt(1839),
     dateAlign: 'left',
     dateColor: WHITE,
@@ -204,6 +219,7 @@ export const templates: readonly TemplateDefinition[] = [
     requiresImage: true,
     canvas,
     photo: rect(0, 0, 1600, 1255),
+    photoFit: 'cover',
     date: dateAt(1841),
     dateAlign: 'left',
     dateColor: WHITE,
@@ -230,6 +246,7 @@ export const templates: readonly TemplateDefinition[] = [
     requiresImage: false,
     canvas,
     photo: null,
+    photoFit: 'cover', // no photo window; unused
     date: dateAt(1886),
     dateAlign: 'left',
     dateColor: BLACK,

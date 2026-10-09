@@ -1,6 +1,6 @@
 import html2canvas from 'html2canvas';
 import { EXPORT_HEIGHT, EXPORT_WIDTH, getTemplate } from '../../config/templates';
-import { photoGeometry } from './geometry';
+import { effectivePhotoFit, photoGeometry } from './geometry';
 import { titleFits } from './titleBounds';
 import { tokenizeTitle } from './highlightTitle';
 import { hasTag } from './photoTag';
@@ -9,7 +9,7 @@ import { decodeImage, waitForFonts, type CardRenderer, type ExportSnapshot } fro
 
 /**
  * html2canvas renderer behind the CardRenderer interface.
- * Uses the shared contain-geometry function instead of object-fit + transforms
+ * Uses the shared photo-geometry function (per-template fit) instead of object-fit + transforms
  * so preview, bounds and export agree. Animated GIF input exports its decoded
  * first frame (browser decoding behavior); documented in README.
  *
@@ -65,7 +65,7 @@ export class Html2CanvasRenderer implements CardRenderer {
       card.style.cssText = `position:relative;width:${canvasWidth}px;height:${canvasHeight}px;overflow:hidden;background:#fff;font-family:${fontFamily},serif;`;
       container.appendChild(card);
 
-      // Photo layer with explicit contain geometry (cards without a photo window skip it).
+      // Photo layer with explicit geometry in the card's effective fit (cards without a photo window skip it).
       const photoViewport = template.photo;
       if (photoViewport && photoImg) {
         const drawn = photoGeometry(
@@ -73,6 +73,7 @@ export class Html2CanvasRenderer implements CardRenderer {
           photoViewport,
           snapshot.state.imageScale,
           snapshot.state.photoPosition,
+          effectivePhotoFit(template.photoFit, snapshot.state.showWholePhoto),
         );
         const photoWindow = document.createElement('div');
         photoWindow.style.cssText = `position:absolute;left:${photoViewport.x}px;top:${photoViewport.y}px;width:${photoViewport.width}px;height:${photoViewport.height}px;overflow:hidden;`;
