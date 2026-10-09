@@ -349,9 +349,21 @@ export default function PhotocardEditor() {
           <h1>Photocard Generator</h1>
           <p className="subhead">1080 × 1080 PNG · Star News articles · Bengali + English</p>
         </div>
-        <button type="button" className="button secondary" onClick={fullReset}>
-          Reset
-        </button>
+        <div className="header-side">
+          <p className="header-status" aria-hidden="true">
+            {template.label} ·{' '}
+            {card.loadStatus === 'loading'
+              ? 'Fetching…'
+              : card.loadStatus === 'ready'
+                ? 'Ready to export'
+                : card.loadStatus === 'error'
+                  ? 'Needs attention'
+                  : 'Idle'}
+          </p>
+          <button type="button" className="button secondary" onClick={fullReset}>
+            Reset
+          </button>
+        </div>
       </header>
 
       <div className="workspace">

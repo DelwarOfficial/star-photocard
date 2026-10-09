@@ -56,3 +56,20 @@ Implementation in progress on 2026-09-05. The legacy WordPress plugin was delete
 - Smart UI pass: sticky preview (desktop), 2-column square template picker, headline word-count/auto-size hint, layout tip, tidier empty placeholder.
 - Real bugs found by browser testing and fixed: CSP `script-src` blocked Astro island inline scripts (hydration fully dead — added `'unsafe-inline'` with a nonce-CSP follow-up note); `clipboardSupported` computed during render caused hydration mismatch (moved to post-mount effect); `/images/*` is shadowed by the adapter's Images binding in dev (fallback photo moved to `/photos/`; also safer in production).
 - Note: the 2026-09-05 Temp backup zip no longer exists (Temp was cleaned); the fallback photo was restored byte-exact from git history (`e09d076`). Legacy plugin rollback now depends on git history plus owner copies.
+
+## Build decisions recorded 2026-10-04
+
+- Full dependency upgrade to latest: astro 7.3.5, `@astrojs/cloudflare`
+  14.3.3, `@astrojs/react` 7, React 19.3, zod 4.6.5, vitest 5, wrangler
+  4.147, Playwright 1.63 (+browsers reinstalled), `@types/node` 26,
+  workers-types Oct 2026. TypeScript held at latest 6.x (6.0.3):
+  TS 7.0 has no `astro check` support yet. Verified: check 0 errors,
+  48/48 tests, build exit 0, binding types regenerated.
+- `.graphifyignore` now also excludes third-party skill-harness dirs
+  (impeccable engines/scripts); graph is app-focused again
+  (~305 nodes).
+
+- UI skills installed project-scoped: `impeccable` (official installer) plus a hand-authored `starnews-brand` lock (palette, type, bans, a11y contract, card model). Public `brand-guidelines` skill found to encode Anthropic's own brand, not generic brand-locking — not installed.
+- Skill-guided polish pass (Operate mode): header status summary (`Template · State`), secondary-button hover, `::selection`/caret theming, tabular numerals on position readouts, status restyled off the side-tab pattern, Inter dropped from the font stack, mobile header simplified.
+- Detector findings adjudicated: status side-tab fixed, Inter removed; photo-tag red bar kept as intentional card-artwork language.
+- Verified by Chromium screenshots (desktop 1600 + mobile 390): Bengali shaping, highlight, template switching, sticky preview, responsive stacking.
