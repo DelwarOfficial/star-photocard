@@ -5,8 +5,9 @@ import QRCode from 'qrcode';
 import { todayBanglaDate } from '../../src/lib/text/dates';
 
 const ARTICLE_URL = 'https://www.starnews.com.bd/bangla-news';
-const CARD_W = 1080;
-const CARD_H = 1350;
+// Exported PNG size (artwork-native 1600 × 2000); layout coordinates stay in the 1080-wide space.
+const CARD_W = 1600;
+const CARD_H = 2000;
 const DIMENSIONS = `${CARD_W} × ${CARD_H} PNG`;
 const UPLOAD_PHOTO = fileURLToPath(new URL('../../public/photos/Star-news-file-image.webp', import.meta.url));
 
@@ -78,7 +79,7 @@ async function expectQrEncodes(page: Page, target: string): Promise<void> {
     .toBe(expected);
 }
 
-/** Download the PNG and return the RGB at each card point (1080 × 1350 space). */
+/** Download the PNG and return the RGB at each card point (given in 1080 × 1350 layout space). */
 async function exportPixels(page: Page, points: Array<{ x: number; y: number }>): Promise<number[][]> {
   const [download] = await Promise.all([
     page.waitForEvent('download'),
@@ -95,7 +96,11 @@ async function exportPixels(page: Page, points: Array<{ x: number; y: number }>)
       canvas.height = img.height;
       const ctx = canvas.getContext('2d')!;
       ctx.drawImage(img, 0, 0);
-      return points.map(({ x, y }) => Array.from(ctx.getImageData(x, y, 1, 1).data.slice(0, 3)));
+      // Points are in the 1080-wide layout space; the PNG is rendered larger.
+      const k = img.width / 1080;
+      return points.map(({ x, y }) =>
+        Array.from(ctx.getImageData(Math.round(x * k), Math.round(y * k), 1, 1).data.slice(0, 3)),
+      );
     },
     { src: `data:image/png;base64,${b64}`, points },
   );

@@ -29,7 +29,7 @@ export const S = {
     type: { title: 'Card type', hint: 'Pick a layout for this story.' },
     content: { title: 'Content', hint: 'Headline, date and labels — all editable.' },
     layout: { title: 'Layout', hint: 'Fine-tune the photo, headline and QR.' },
-    export: { title: 'Export', hint: 'Grab the finished 1080 × 1350 PNG.' },
+    export: { title: 'Export', hint: 'Grab the finished 1600 × 2000 PNG.' },
     preview: 'Photocard preview',
   },
   picker: {

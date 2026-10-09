@@ -10,6 +10,15 @@ export type CardMode = 'article' | 'custom';
 export const CARD_WIDTH = 1080;
 export const CARD_HEIGHT = 1350;
 
+/**
+ * Exported PNG size: the artwork's native 1600 × 2000. Layout stays in the
+ * 1080-wide layout space above; the exporter renders it at 1600 / 1080 so
+ * text and the QR are redrawn sharp and the artwork and photo keep full detail.
+ */
+export const EXPORT_WIDTH = 1600;
+export const EXPORT_HEIGHT = 2000;
+export const EXPORT_SCALE = EXPORT_WIDTH / CARD_WIDTH;
+
 /** Root domain; the QR target for custom cards, which have no reference article URL. */
 export const SITE_URL = 'https://starnews.com.bd';
 

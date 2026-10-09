@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { CARD_HEIGHT, CARD_WIDTH, templates, templatesForMode } from '../../src/config/templates';
+import { CARD_HEIGHT, CARD_WIDTH, EXPORT_HEIGHT, EXPORT_SCALE, EXPORT_WIDTH, templates, templatesForMode } from '../../src/config/templates';
 import { coverGeometry, clampPhotoOffset, clampToCanvas, previewScale } from '../../src/lib/card/geometry';
 import { titleFontSize, tokenizeTitle } from '../../src/lib/card/highlightTitle';
 import { normalizePhotoTag, countCodePoints } from '../../src/lib/card/photoTag';
@@ -127,6 +127,11 @@ describe('dates', () => {
 });
 
 describe('template registry', () => {
+  it('exports at the artwork-native 1600 × 2000, same 4:5 shape as the layout', () => {
+    expect([EXPORT_WIDTH, EXPORT_HEIGHT]).toEqual([1600, 2000]);
+    expect(EXPORT_HEIGHT / EXPORT_WIDTH).toBeCloseTo(CARD_HEIGHT / CARD_WIDTH, 10);
+    expect(EXPORT_SCALE).toBeCloseTo(1600 / 1080, 10);
+  });
   it('ships six 1080 × 1350 templates with layers inside their canvas', () => {
     expect(CARD_WIDTH).toBe(1080);
     expect(CARD_HEIGHT).toBe(1350);

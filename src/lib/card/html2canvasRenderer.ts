@@ -1,5 +1,5 @@
 import html2canvas from 'html2canvas';
-import { getTemplate } from '../../config/templates';
+import { EXPORT_HEIGHT, EXPORT_WIDTH, getTemplate } from '../../config/templates';
 import { coverGeometry } from './geometry';
 import { tokenizeTitle } from './highlightTitle';
 import { hasTag } from './photoTag';
@@ -141,7 +141,8 @@ export class Html2CanvasRenderer implements CardRenderer {
       document.body.appendChild(container);
       const canvas = await html2canvas(card, {
         backgroundColor: '#ffffff',
-        scale: 1,
+        // Render the 1080-wide layout at 1600 / 1080: vector text re-rasterised, images sampled at full size.
+        scale: EXPORT_WIDTH / canvasWidth,
         useCORS: true,
         allowTaint: false,
         width: canvasWidth,
@@ -150,11 +151,12 @@ export class Html2CanvasRenderer implements CardRenderer {
         windowHeight: canvasHeight,
       });
       const output = document.createElement('canvas');
-      output.width = canvasWidth;
-      output.height = canvasHeight;
+      output.width = EXPORT_WIDTH;
+      output.height = EXPORT_HEIGHT;
       const ctx = output.getContext('2d');
       if (!ctx) throw new Error('EXPORT_FAILED');
-      ctx.drawImage(canvas, 0, 0, canvasWidth, canvasHeight);
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(canvas, 0, 0, EXPORT_WIDTH, EXPORT_HEIGHT);
       const blob = await new Promise<Blob | null>((resolve) => output.toBlob(resolve, 'image/png'));
       if (!blob) throw new Error('EXPORT_FAILED');
       return blob;

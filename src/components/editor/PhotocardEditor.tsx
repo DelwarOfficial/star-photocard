@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { getTemplate, SITE_URL, type TemplateDefinition } from '../../config/templates';
+import { EXPORT_HEIGHT, EXPORT_SCALE, EXPORT_WIDTH, getTemplate, SITE_URL, type TemplateDefinition } from '../../config/templates';
 import { titleFontSize, tokenizeTitle } from '../../lib/card/highlightTitle';
 import { defaultRenderer } from '../../lib/card/html2canvasRenderer';
 import { clampPhotoOffset, clampToCanvas, previewScale } from '../../lib/card/geometry';
@@ -357,7 +357,7 @@ export default function PhotocardEditor() {
         document.body.appendChild(link);
         link.click();
         link.remove();
-        notify('success', S.status.downloaded(template.canvas.width, template.canvas.height));
+        notify('success', S.status.downloaded(EXPORT_WIDTH, EXPORT_HEIGHT));
       } finally {
         setTimeout(() => URL.revokeObjectURL(url), 5000);
       }
@@ -366,7 +366,7 @@ export default function PhotocardEditor() {
     } finally {
       setExporting('idle');
     }
-  }, [canExport, exportBlob, notify, template.canvas]);
+  }, [canExport, exportBlob, notify]);
 
   const copy = useCallback(async () => {
     if (!canExport) return;
@@ -413,7 +413,6 @@ export default function PhotocardEditor() {
   const showCustomCredit = customCredit || (card.photoCredit !== '' && !creditIsPreset);
   const qr = qrStyle(template, card);
   const emphasis = highlightColor(template);
-  const { width: canvasW, height: canvasH } = template.canvas;
   const layers: LayerKey[] = [...(template.photo ? ['photo' as const] : []), 'title', ...(template.qr ? ['qr' as const] : [])];
   const activeLayer: LayerKey = layers.includes(selectedLayer) ? selectedLayer : 'title';
   const isEmpty = card.loadStatus === 'idle' && !card.title.trim();
@@ -457,7 +456,7 @@ export default function PhotocardEditor() {
           <StarMark size={34} />
           <div>
             <h1>{S.header.title}</h1>
-            <p className="subhead">{S.header.subhead(canvasW, canvasH)}</p>
+            <p className="subhead">{S.header.subhead(EXPORT_WIDTH, EXPORT_HEIGHT)}</p>
           </div>
         </div>
         <div className="toolbar">
@@ -943,7 +942,7 @@ export default function PhotocardEditor() {
             </div>
           </div>
           <p className="dimensions">
-            <span className="badge">{S.export.previewScale(canvasW, canvasH, scale.toFixed(2))}</span>
+            <span className="badge">{S.export.previewScale(EXPORT_WIDTH, EXPORT_HEIGHT, (scale / EXPORT_SCALE).toFixed(2))}</span>
           </p>
           <p className="shortcuts" aria-label={S.shortcuts.label}>
             {isArticle && (
