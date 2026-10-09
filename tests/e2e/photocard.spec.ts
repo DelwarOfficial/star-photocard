@@ -115,8 +115,12 @@ async function solidPng(page: Page, color: string): Promise<{ name: string; mime
   return { name: 'solid.png', mimeType: 'image/png', buffer: Buffer.from(b64, 'base64') };
 }
 
+/** The template picker button (its name includes the current template). */
+const pickerButton = (page: Page) => page.getByRole('button', { name: /^Template/ });
+
 async function pickTemplate(page: Page, name: RegExp): Promise<void> {
-  await page.getByRole('radio', { name }).check({ force: true });
+  await pickerButton(page).click();
+  await page.getByRole('option', { name }).click();
 }
 
 async function downloadPng(page: Page): Promise<{ width: number; height: number; name: string }> {
@@ -189,7 +193,7 @@ test.describe('photocard generator', () => {
     for (let i = 0; i < 5; i += 1) await zoomIn.click();
     await expect(page.getByLabel(/^Photo zoom/)).toHaveValue('1.5');
     const photoPos = page.getByText(/^Photo position:/);
-    for (let i = 0; i < 3; i += 1) await page.getByRole('button', { name: 'Move photo up' }).click({ modifiers: [] });
+    for (let i = 0; i < 3; i += 1) await page.getByRole('button', { name: 'Move photo up', exact: true }).click({ modifiers: [] });
     await page.locator('.drag-layer').first().focus();
     await page.keyboard.press('Shift+ArrowUp');
     await expect(photoPos).not.toHaveText('Photo position: 0, 0 px');
@@ -308,6 +312,109 @@ test.describe('photocard generator', () => {
     expect(bengaliChrome).toEqual([]);
   });
 
+  test('template dropdown: grouped options, keyboard selection, cross-fade', async ({ page }) => {
+    await open(page);
+    const button = pickerButton(page);
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+    await expect(button).toContainText('Photo on top');
+    await button.click();
+    const list = page.getByRole('listbox');
+    await expect(list).toBeVisible();
+    const article = list.getByRole('group', { name: /Article cards/ });
+    const custom = list.getByRole('group', { name: /Custom cards/ });
+    await expect(article.getByRole('option')).toHaveText([
+      /Photo on top/,
+      /Photo at bottom/,
+      /Full photo, headline on top/,
+      /Full photo, headline at bottom/,
+    ]);
+    await expect(custom.getByRole('option')).toHaveText([/Just In/, /Breaking News/]);
+    await expect(article.getByRole('option').first()).toContainText('Article');
+    await expect(custom.getByRole('option').first()).toContainText('Custom');
+    // Keyboard: End jumps to the last option, Enter picks it and returns focus to the button.
+    await page.keyboard.press('End');
+    await page.keyboard.press('Enter');
+    await expect(list).toBeHidden();
+    await expect(button).toBeFocused();
+    await expect(button).toContainText('Breaking News');
+    await expect(page.locator('.card')).toHaveClass(/card-enter/);
+    // Escape closes without changing the choice.
+    await page.keyboard.press('ArrowDown');
+    await expect(page.getByRole('listbox')).toBeVisible();
+    await page.keyboard.press('Home');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('listbox')).toBeHidden();
+    await expect(button).toContainText('Breaking News');
+  });
+
+  test('nudge pad moves the selected layer, including diagonals', async ({ page }) => {
+    await mockArticle(page, {});
+    await generate(page);
+    await page.getByRole('radio', { name: 'Headline' }).click();
+    const pos = page.getByText(/^Headline position:/);
+    const before = (await pos.textContent())!.match(/(-?\d+), (-?\d+)/)!.slice(1).map(Number);
+    await page.getByRole('button', { name: 'Move headline up-right' }).click();
+    await page.getByRole('button', { name: 'Move headline up-right' }).click({ modifiers: ['Shift'] });
+    await expect(pos).toHaveText(`Headline position: ${before[0]! + 11}, ${before[1]! - 11} px`);
+    await page.getByRole('button', { name: 'Reset headline' }).click();
+    await expect(pos).toHaveText(`Headline position: ${before[0]}, ${before[1]} px`);
+  });
+
+  test('keyboard shortcuts: G generate, arrows nudge, D download, R reset; not while typing', async ({ page }) => {
+    await mockArticle(page, {});
+    await open(page);
+    await page.getByLabel('Star News article link').fill(ARTICLE_URL);
+    // Typing "g" in a field must not trigger Generate.
+    await page.getByLabel('Headline', { exact: true }).press('g');
+    await expect(page.getByRole('status')).not.toContainText('Card ready');
+    await page.locator('h1').click(); // move focus out of the fields
+    await page.keyboard.press('g');
+    await expect(page.getByRole('status')).toContainText('Card ready');
+    await page.getByRole('radio', { name: 'Headline' }).click();
+    await page.locator('h1').click();
+    const pos = page.getByText(/^Headline position:/);
+    const before = await pos.textContent();
+    await page.keyboard.press('Shift+ArrowDown');
+    await expect(pos).not.toHaveText(before!);
+    const [download] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('d')]);
+    expect(download.suggestedFilename()).toMatch(/\.png$/);
+    page.once('dialog', (dialog) => void dialog.accept());
+    await page.keyboard.press('r');
+    await expect(page.getByLabel('Headline', { exact: true })).toHaveValue('');
+  });
+
+  test('empty state, loading shimmer and export toast', async ({ page }) => {
+    await page.route('**/api/article', async (route) => {
+      await new Promise((r) => setTimeout(r, 600));
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: { canonicalUrl: ARTICLE_URL, title: 'শিরোনাম', language: 'bn' } }),
+      });
+    });
+    await open(page);
+    await expect(page.locator('.preview-empty')).toContainText('Your card will appear here');
+    await page.getByLabel('Star News article link').fill(ARTICLE_URL);
+    await page.getByRole('button', { name: 'Generate', exact: true }).click();
+    await expect(page.locator('.preview-skeleton')).toBeVisible();
+    await expect(page.getByRole('status')).toContainText('Card ready');
+    await expect(page.locator('.preview-skeleton')).toHaveCount(0);
+    await expect(page.locator('.preview-empty')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Download PNG' }).click();
+    await expect(page.locator('.toast')).toContainText('PNG downloaded');
+    await expect(page.locator('.toast')).toBeHidden({ timeout: 6000 });
+  });
+
+  test('preview stays visible while the controls scroll (desktop)', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 800 });
+    await mockArticle(page, {});
+    await generate(page);
+    await page.getByRole('button', { name: 'Download PNG' }).scrollIntoViewIfNeeded();
+    const frame = (await page.locator('.preview-frame').boundingBox())!;
+    expect(frame.y).toBeGreaterThanOrEqual(0);
+    expect(frame.y + frame.height / 2).toBeLessThan(800);
+  });
+
   test(`downloads a ${CARD_W} × ${CARD_H} PNG`, async ({ page }) => {
     await mockArticle(page, {});
     await generate(page);
@@ -351,7 +458,7 @@ test.describe('photocard generator', () => {
     page.once('dialog', (dialog) => void dialog.accept());
     await page.getByRole('button', { name: 'Reset', exact: true }).click();
     await expect(page.getByLabel('Date', { exact: true })).toHaveValue(todayBanglaDate());
-    await expect(page.getByRole('radio', { name: /Breaking News/ })).toBeChecked();
+    await expect(pickerButton(page)).toContainText('Breaking News');
   });
 
   test('export fails loudly instead of swapping in the stock photo', async ({ page }) => {
@@ -367,11 +474,13 @@ test.describe('photocard generator', () => {
   test('every template renders its artwork and exports at full size', async ({ page }) => {
     await mockArticle(page, {});
     await generate(page);
-    const radios = page.getByRole('radio');
-    const count = await radios.count();
+    await pickerButton(page).click();
+    const count = await page.getByRole('listbox').getByRole('option').count();
     expect(count).toBe(6);
+    await page.keyboard.press('Escape');
     for (let i = 0; i < count; i += 1) {
-      await radios.nth(i).check({ force: true });
+      await pickerButton(page).click();
+      await page.getByRole('listbox').getByRole('option').nth(i).click();
       if (await page.getByLabel(/^Photo \(required/).count()) {
         await page.getByLabel(/^Photo \(required/).setInputFiles(UPLOAD_PHOTO);
       }

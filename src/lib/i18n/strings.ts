@@ -5,7 +5,7 @@
  */
 export const UI_LANG = 'en';
 
-type LayerKey = 'photo' | 'title' | 'qr';
+export type LayerKey = 'photo' | 'title' | 'qr';
 
 export const S = {
   page: {
@@ -16,6 +16,7 @@ export const S = {
     title: 'Photocard Generator',
     subhead: (w: number, h: number) => `Star News · ${w} × ${h} PNG · Article and custom cards`,
     reset: 'Reset',
+    resetHint: 'Start over (R)',
     state: {
       needsPhoto: 'Needs a photo',
       fetching: 'Fetching…',
@@ -25,15 +26,29 @@ export const S = {
   },
   sections: {
     controls: 'Photocard controls',
-    type: '1. Card type',
-    content: '2. Content',
-    layout: '3. Layout',
-    export: '4. Export',
+    type: { title: 'Card type', hint: 'Pick a layout for this story.' },
+    content: { title: 'Content', hint: 'Headline, date and labels — all editable.' },
+    layout: { title: 'Layout', hint: 'Fine-tune the photo, headline and QR.' },
+    export: { title: 'Export', hint: 'Grab the finished 1080 × 1350 PNG.' },
     preview: 'Photocard preview',
   },
+  picker: {
+    label: 'Template',
+  },
+  empty: {
+    title: 'Your card will appear here',
+    body: 'Paste a Star News link and hit Generate — or pick a custom card and start typing.',
+  },
+  shortcuts: {
+    label: 'Keyboard shortcuts',
+    generate: 'Generate',
+    download: 'Download',
+    reset: 'Reset',
+    nudge: 'Nudge layer',
+  },
   modes: {
-    article: { label: 'Article cards', hint: 'Pull the headline, photo and category from a Star News link.' },
-    custom: { label: 'Custom cards', hint: 'No link needed — write the headline yourself.' },
+    article: { label: 'Article cards', hint: 'From a Star News link', badge: 'Article' },
+    custom: { label: 'Custom cards', hint: 'Write it yourself', badge: 'Custom' },
   },
   templates: {
     'common-card': 'Photo on top',
@@ -110,9 +125,13 @@ export const S = {
   layers: {
     names: { photo: 'photo', title: 'headline', qr: 'QR code' } as Record<LayerKey, string>,
     position: { photo: 'Photo position', title: 'Headline position', qr: 'QR position' } as Record<LayerKey, string>,
-    move: (name: string, dir: 'left' | 'up' | 'down' | 'right') => `Move ${name} ${dir}`,
+    move: (name: string, dir: string) => `Move ${name} ${dir}`,
+    choose: 'Layer to move',
+    positionsLabel: 'Layer positions',
+    short: { photo: 'Photo', title: 'Headline', qr: 'QR' } as Record<LayerKey, string>,
+    padLabel: (name: string) => `Move the ${name}`,
     reset: { photo: 'Reset photo', title: 'Reset headline', qr: 'Reset QR' } as Record<LayerKey, string>,
-    help: 'Arrow keys move 1 px, Shift + arrow moves 10 px. You can also drag.',
+    help: 'Click a direction (Shift = 10 px), use the arrow keys, or drag on the preview.',
     preview: { photo: 'Photo layer', title: 'Headline layer', qr: 'QR code layer' } as Record<LayerKey, string>,
     previewHint: (label: string) => `${label}. Use the arrow keys to nudge it.`,
   },

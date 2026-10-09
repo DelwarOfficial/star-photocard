@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { getTemplate, SITE_URL, templatesForMode, type TemplateDefinition } from '../../config/templates';
+import { getTemplate, SITE_URL, type TemplateDefinition } from '../../config/templates';
 import { titleFontSize, tokenizeTitle } from '../../lib/card/highlightTitle';
 import { defaultRenderer } from '../../lib/card/html2canvasRenderer';
 import { clampPhotoOffset, clampToCanvas, previewScale } from '../../lib/card/geometry';
@@ -10,7 +10,10 @@ import { downloadFilename, isClipboardSupported } from '../../lib/card/renderer'
 import { creditStyle, highlightColor, pillStyle, qrStyle, dateStyle, titleStyle } from '../../lib/card/layerStyles';
 import { FALLBACK_IMAGE_SRC, initialCardState } from '../../lib/card/types';
 import { todayBanglaDate } from '../../lib/text/dates';
-import { S, UI_LANG } from '../../lib/i18n/strings';
+import { S, UI_LANG, type LayerKey } from '../../lib/i18n/strings';
+import { Icon, StarMark } from './Icon';
+import { TemplatePicker } from './TemplatePicker';
+import { NudgePad, RangeField, SectionHead } from './Controls';
 import { isStarNewsHost } from '../../lib/article/normalizeArticleUrl';
 
 type ArticlePayload = {
@@ -24,25 +27,6 @@ type ArticlePayload = {
 type StatusTone = 'info' | 'success' | 'warning' | 'error';
 
 const TITLE_SIZES = [44, 52, 60, 75];
-
-type IconName = 'left' | 'up' | 'down' | 'right' | 'minus' | 'plus';
-const ICON_PATHS: Record<IconName, string> = {
-  left: 'M15 6l-6 6 6 6',
-  up: 'M6 15l6-6 6 6',
-  down: 'M6 9l6 6 6-6',
-  right: 'M9 6l6 6-6 6',
-  minus: 'M5 12h14',
-  plus: 'M12 5v14M5 12h14',
-};
-
-/** One stroke icon family (24-unit grid, 2px round stroke); the button carries the accessible name. */
-function Icon({ name }: { name: IconName }) {
-  return (
-    <svg className="icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
-      <path d={ICON_PATHS[name]} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
 
 /** Inline sizing for the card + frame; replaces the old fixed 1080 × 1080 CSS. */
 function canvasBox(template: TemplateDefinition, scale: number) {
@@ -87,6 +71,19 @@ export default function PhotocardEditor() {
   const [urlError, setUrlError] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [exporting, setExporting] = useState<'idle' | 'copy' | 'download'>('idle');
+  // Layer the nudge pad and arrow-key shortcuts move; set by the switcher or by touching a layer.
+  const [selectedLayer, setSelectedLayer] = useState<LayerKey>('photo');
+  // Visual toast for export results (the status region still announces them).
+  const [toast, setToast] = useState<{ id: number; tone: StatusTone; text: string } | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [toast]);
+  const notify = useCallback((tone: StatusTone, text: string) => {
+    setStatus({ tone, text });
+    setToast({ id: Date.now(), tone, text });
+  }, []);
   // Custom credit: the text field stays open even while empty (empty custom = no tag).
   const [customCredit, setCustomCredit] = useState(false);
   const [lastRemoteImage, setLastRemoteImage] = useState<{ src: string; kind: 'remote' | 'fallback' } | null>(null);
@@ -360,16 +357,16 @@ export default function PhotocardEditor() {
         document.body.appendChild(link);
         link.click();
         link.remove();
-        announce('success', S.status.downloaded(template.canvas.width, template.canvas.height));
+        notify('success', S.status.downloaded(template.canvas.width, template.canvas.height));
       } finally {
         setTimeout(() => URL.revokeObjectURL(url), 5000);
       }
     } catch (err) {
-      announce('error', exportFailureMessage(err, 'download'));
+      notify('error', exportFailureMessage(err, 'download'));
     } finally {
       setExporting('idle');
     }
-  }, [canExport, exportBlob, announce, template.canvas]);
+  }, [canExport, exportBlob, notify, template.canvas]);
 
   const copy = useCallback(async () => {
     if (!canExport) return;
@@ -382,19 +379,19 @@ export default function PhotocardEditor() {
     try {
       blob = await exportBlob();
     } catch (err) {
-      announce('error', exportFailureMessage(err, 'copy'));
+      notify('error', exportFailureMessage(err, 'copy'));
       setExporting('idle');
       return;
     }
     try {
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-      announce('success', S.status.copied);
+      notify('success', S.status.copied);
     } catch {
-      announce('warning', S.status.copyBlocked);
+      notify('warning', S.status.copyBlocked);
     } finally {
       setExporting('idle');
     }
-  }, [canExport, exportBlob, announce]);
+  }, [canExport, exportBlob, announce, notify]);
 
   const loading = card.loadStatus === 'loading';
   /** Zoom and re-clamp the pan so zooming out never exposes the window behind the photo. */
@@ -417,32 +414,65 @@ export default function PhotocardEditor() {
   const qr = qrStyle(template, card);
   const emphasis = highlightColor(template);
   const { width: canvasW, height: canvasH } = template.canvas;
+  const layers: LayerKey[] = [...(template.photo ? ['photo' as const] : []), 'title', ...(template.qr ? ['qr' as const] : [])];
+  const activeLayer: LayerKey = layers.includes(selectedLayer) ? selectedLayer : 'title';
+  const isEmpty = card.loadStatus === 'idle' && !card.title.trim();
 
   const switchTemplate = (id: string) => {
     dispatch({ type: 'SWITCH_TEMPLATE', templateId: id });
   };
+  const resetLayer = (layer: LayerKey) =>
+    dispatch({ type: layer === 'photo' ? 'RESET_PHOTO' : layer === 'title' ? 'RESET_TITLE' : 'RESET_QR' });
+
+  // Keyboard shortcuts: G generate, D download, R reset, arrows nudge the selected layer.
+  // Ignored while typing in a field, inside the template list, or with a modifier held.
+  const shortcutRef = useRef({ generate, download, fullReset, nudge, activeLayer, isArticle, canExport });
+  shortcutRef.current = { generate, download, fullReset, nudge, activeLayer, isArticle, canExport };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('input, textarea, select, [contenteditable="true"], [role="listbox"], [role="radiogroup"]')) return;
+      const k = shortcutRef.current;
+      const key = e.key.toLowerCase();
+      if (key === 'g' && k.isArticle) void k.generate();
+      else if (key === 'd' && k.canExport) void k.download();
+      else if (key === 'r') k.fullReset();
+      else if (e.key.startsWith('Arrow')) {
+        const step = e.shiftKey ? 10 : 1;
+        const [dx, dy] =
+          e.key === 'ArrowLeft' ? [-step, 0] : e.key === 'ArrowRight' ? [step, 0] : e.key === 'ArrowUp' ? [0, -step] : [0, step];
+        k.nudge(k.activeLayer, dx, dy);
+      } else return;
+      e.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   return (
     <div className="app-shell" lang={UI_LANG}>
       <header className="app-header">
-        <div>
-          <h1>{S.header.title}</h1>
-          <p className="subhead">
-            {S.header.subhead(canvasW, canvasH)}
-          </p>
+        <div className="brand">
+          <StarMark size={34} />
+          <div>
+            <h1>{S.header.title}</h1>
+            <p className="subhead">{S.header.subhead(canvasW, canvasH)}</p>
+          </div>
         </div>
-        <div className="header-side">
+        <div className="toolbar">
           <p className="header-status" aria-hidden="true">
-            {template.label} ·{' '}
+            <span className={`status-dot ${canExport ? 'ok' : loading ? 'busy' : ''}`} />
             {needsUpload
               ? S.header.state.needsPhoto
-              : card.loadStatus === 'loading'
+              : loading
                 ? S.header.state.fetching
                 : canExport
                   ? S.header.state.ready
                   : S.header.state.needsHeadline}
           </p>
-          <button type="button" className="button secondary" onClick={fullReset}>
+          <button type="button" className="button ghost" onClick={fullReset} title={S.header.resetHint} aria-keyshortcuts="R">
+            <Icon name="reset" size={18} />
             {S.header.reset}
           </button>
         </div>
@@ -452,65 +482,43 @@ export default function PhotocardEditor() {
         <div className="controls" aria-label={S.sections.controls}>
           <section aria-labelledby="type-heading">
             <fieldset>
-              <legend id="type-heading">{S.sections.type}</legend>
-              {(['article', 'custom'] as const).map((mode) => (
-                <div key={mode} className="mode-group">
-                  <span className="field-label" id={`mode-${mode}-label`}>
-                    {S.modes[mode].label}
-                  </span>
-                  <small id={`mode-${mode}-hint`}>{S.modes[mode].hint}</small>
-                  <div
-                    className="template-grid"
-                    role="radiogroup"
-                    aria-labelledby={`mode-${mode}-label`}
-                    aria-describedby={`mode-${mode}-hint`}
-                  >
-                    {templatesForMode(mode).map((item) => (
-                      <label key={item.id} className={item.id === card.templateId ? 'template selected' : 'template'}>
-                        <input
-                          type="radio"
-                          name="template"
-                          value={item.id}
-                          checked={item.id === card.templateId}
-                          onChange={() => switchTemplate(item.id)}
-                        />
-                        <img src={item.thumbnail} alt="" loading="lazy" />
-                        <span>{S.templates[item.id] ?? item.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              ))}
+              <SectionHead id="type-heading" step={1} title={S.sections.type.title} hint={S.sections.type.hint} />
+              <TemplatePicker value={card.templateId} onChange={switchTemplate} />
             </fieldset>
           </section>
 
           <section aria-labelledby="content-heading">
             <fieldset>
-              <legend id="content-heading">{S.sections.content}</legend>
+              <SectionHead id="content-heading" step={2} title={S.sections.content.title} hint={S.sections.content.hint} />
 
               {isArticle && (
                 <>
                   <label htmlFor="article-url">{S.url.label}</label>
-                  <input
-                    id="article-url"
-                    type="url"
-                    inputMode="url"
-                    autoComplete="url"
-                    placeholder="https://starnews.com.bd/…"
-                    value={card.sourceUrl}
-                    aria-invalid={urlError ? true : undefined}
-                    aria-describedby={urlError ? 'article-url-error url-help' : 'url-help'}
-                    onChange={(e) => {
-                      dispatch({ type: 'SET_SOURCE_URL', url: e.target.value });
-                      if (urlError) setUrlError(validateSourceUrl(e.target.value));
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        void generate();
-                      }
-                    }}
-                  />
+                  <div className="url-row">
+                    <span className="url-icon">
+                      <Icon name="link" size={18} />
+                    </span>
+                    <input
+                      id="article-url"
+                      type="url"
+                      inputMode="url"
+                      autoComplete="url"
+                      placeholder="https://starnews.com.bd/…"
+                      value={card.sourceUrl}
+                      aria-invalid={urlError ? true : undefined}
+                      aria-describedby={urlError ? 'article-url-error url-help' : 'url-help'}
+                      onChange={(e) => {
+                        dispatch({ type: 'SET_SOURCE_URL', url: e.target.value });
+                        if (urlError) setUrlError(validateSourceUrl(e.target.value));
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          void generate();
+                        }
+                      }}
+                    />
+                  </div>
                   <small id="url-help">{S.url.help}</small>
                   {urlError && (
                     <p id="article-url-error" className="field-error" role="alert">
@@ -523,7 +531,9 @@ export default function PhotocardEditor() {
                       className="button primary"
                       onClick={() => void generate()}
                       disabled={loading || exporting !== 'idle'}
+                      aria-keyshortcuts="G"
                     >
+                      {loading ? <span className="spinner" aria-hidden="true" /> : <Icon name="sparkle" size={18} />}
                       {loading ? S.url.fetching : S.url.generate}
                     </button>
                     {loading && (
@@ -545,9 +555,7 @@ export default function PhotocardEditor() {
                     aria-describedby="local-image-help"
                     onChange={(e) => chooseLocalImage(e.target.files?.[0])}
                   />
-                  <small id="local-image-help">
-                    {needsUpload ? S.upload.needed : S.upload.loaded}
-                  </small>
+                  <small id="local-image-help">{needsUpload ? S.upload.needed : S.upload.loaded}</small>
                 </>
               )}
 
@@ -566,11 +574,7 @@ export default function PhotocardEditor() {
                   return S.headline.stats(words, titleFontSize(card.title));
                 })()}
               </p>
-              <small id="headline-help">
-                {template.highlightColor
-                  ? S.headline.helpHighlight
-                  : S.headline.helpPlain}
-              </small>
+              <small id="headline-help">{template.highlightColor ? S.headline.helpHighlight : S.headline.helpPlain}</small>
 
               <label htmlFor="pub-date">{S.date.label}</label>
               <div className="input-action">
@@ -611,9 +615,7 @@ export default function PhotocardEditor() {
                       <option key={preset} value={preset} />
                     ))}
                   </datalist>
-                  <small id="photo-tag-help">
-                    {S.category.help(Array.from(card.photoTag).length, PHOTO_TAG_MAX_LENGTH)}
-                  </small>
+                  <small id="photo-tag-help">{S.category.help(Array.from(card.photoTag).length, PHOTO_TAG_MAX_LENGTH)}</small>
                 </>
               )}
 
@@ -646,7 +648,7 @@ export default function PhotocardEditor() {
                   </select>
                   <small id="photo-credit-help">{S.credit.help}</small>
                   {showCustomCredit && (
-                    <>
+                    <div className="reveal">
                       <label htmlFor="photo-credit-custom">{S.credit.customLabel}</label>
                       <input
                         id="photo-credit-custom" lang="bn"
@@ -657,10 +659,8 @@ export default function PhotocardEditor() {
                         aria-describedby="photo-credit-count"
                         onChange={(e) => dispatch({ type: 'SET_PHOTO_CREDIT', credit: e.target.value })}
                       />
-                      <small id="photo-credit-count">
-                        {S.credit.count(Array.from(card.photoCredit).length, PHOTO_TAG_MAX_LENGTH)}
-                      </small>
-                    </>
+                      <small id="photo-credit-count">{S.credit.count(Array.from(card.photoCredit).length, PHOTO_TAG_MAX_LENGTH)}</small>
+                    </div>
                   )}
                 </>
               )}
@@ -669,33 +669,39 @@ export default function PhotocardEditor() {
 
           <section aria-labelledby="design-heading">
             <fieldset>
-              <legend id="design-heading">{S.sections.layout}</legend>
+              <SectionHead id="design-heading" step={3} title={S.sections.layout.title} hint={S.sections.layout.hint} />
+
+              {template.photo && isArticle && (
+                <>
+                  <label htmlFor="local-image">{S.upload.replace}</label>
+                  <input
+                    id="local-image"
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => chooseLocalImage(e.target.files?.[0])}
+                  />
+                  <div className="input-action">
+                    <button type="button" className="button secondary" onClick={restoreArticleImage}>
+                      {S.upload.restore}
+                    </button>
+                  </div>
+                  <p className="field-note">
+                    {S.upload.source.label} {S.upload.source[card.image.kind]}.
+                  </p>
+                </>
+              )}
 
               {template.photo && (
-                <>
-                  {isArticle && (
-                    <>
-                      <label htmlFor="local-image">{S.upload.replace}</label>
-                      <input
-                        id="local-image"
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => chooseLocalImage(e.target.files?.[0])}
-                      />
-                      <div className="input-action">
-                        <button type="button" className="button secondary" onClick={restoreArticleImage}>
-                          {S.upload.restore}
-                        </button>
-                      </div>
-                      <p className="field-note">
-                        {S.upload.source.label} {S.upload.source[card.image.kind]}.
-                      </p>
-                    </>
-                  )}
-                  <label htmlFor="zoom-range">
-                    {S.zoom.label(card.imageScale.toFixed(1), ZOOM_MIN, ZOOM_MAX)}
-                  </label>
-                  <div className="zoom-controls">
+                <RangeField
+                  id="zoom-range"
+                  label={S.zoom.label(card.imageScale.toFixed(1), ZOOM_MIN, ZOOM_MAX)}
+                  min={ZOOM_MIN}
+                  max={ZOOM_MAX}
+                  step={ZOOM_STEP}
+                  value={card.imageScale}
+                  display={`${card.imageScale.toFixed(1)}×`}
+                  onChange={setZoom}
+                  before={
                     <button
                       type="button"
                       className="chip"
@@ -705,15 +711,8 @@ export default function PhotocardEditor() {
                     >
                       <Icon name="minus" />
                     </button>
-                    <input
-                      id="zoom-range"
-                      type="range"
-                      min={ZOOM_MIN}
-                      max={ZOOM_MAX}
-                      step={ZOOM_STEP}
-                      value={card.imageScale}
-                      onChange={(e) => setZoom(Number(e.target.value))}
-                    />
+                  }
+                  after={
                     <button
                       type="button"
                       className="chip"
@@ -723,30 +722,21 @@ export default function PhotocardEditor() {
                     >
                       <Icon name="plus" />
                     </button>
-                  </div>
-                  <small>{S.zoom.help}</small>
-                  <PositionControls
-                    layer="photo"
-                    x={card.photoPosition.x}
-                    y={card.photoPosition.y}
-                    onNudge={(dx, dy) => nudge('photo', dx, dy)}
-                    onReset={() => dispatch({ type: 'RESET_PHOTO' })}
-                    onKeyDown={onLayerKeyDown('photo')}
-                  />
-                </>
+                  }
+                />
               )}
 
-              <label htmlFor="font-size-range">{S.fontSize.label(card.fontSize)}</label>
-              <input
+              <RangeField
                 id="font-size-range"
-                type="range"
+                label={S.fontSize.label(card.fontSize)}
                 min={30}
                 max={120}
                 step={1}
                 value={card.fontSize}
-                onChange={(e) => dispatch({ type: 'SET_FONT_SIZE', size: Number(e.target.value) })}
+                display={`${card.fontSize}px`}
+                onChange={(size) => dispatch({ type: 'SET_FONT_SIZE', size })}
               />
-              <div className="input-action">
+              <div className="input-action size-row">
                 <label htmlFor="font-size-number" className="visually-hidden">
                   {S.fontSize.value}
                 </label>
@@ -766,6 +756,7 @@ export default function PhotocardEditor() {
                         key={size}
                         type="button"
                         className="chip"
+                        aria-pressed={card.fontSize === size}
                         onClick={() => dispatch({ type: 'SET_FONT_SIZE', size })}
                       >
                         {size}
@@ -774,41 +765,30 @@ export default function PhotocardEditor() {
                 </div>
               </div>
 
-              <PositionControls
-                layer="title"
-                x={card.titlePosition.x}
-                y={card.titlePosition.y}
-                onNudge={(dx, dy) => nudge('title', dx, dy)}
-                onReset={() => dispatch({ type: 'RESET_TITLE' })}
-                onKeyDown={onLayerKeyDown('title')}
+              <NudgePad
+                layers={layers}
+                selected={activeLayer}
+                onSelect={setSelectedLayer}
+                positions={{ photo: card.photoPosition, title: card.titlePosition, qr: card.qrPosition }}
+                onNudge={(dx, dy) => nudge(activeLayer, dx, dy)}
+                onReset={() => resetLayer(activeLayer)}
               />
 
               {template.qr && (
-                <>
-                  <PositionControls
-                    layer="qr"
-                    x={card.qrPosition.x}
-                    y={card.qrPosition.y}
-                    onNudge={(dx, dy) => nudge('qr', dx, dy)}
-                    onReset={() => dispatch({ type: 'RESET_QR' })}
-                    onKeyDown={onLayerKeyDown('qr')}
+                <div className="qr-toggle">
+                  <input
+                    id="qr-visible"
+                    type="checkbox"
+                    role="switch"
+                    className="switch"
+                    checked={card.qrVisible}
+                    onChange={(e) => dispatch({ type: 'SET_QR_VISIBLE', visible: e.target.checked })}
                   />
-                  <div className="qr-toggle">
-                    <input
-                      id="qr-visible"
-                      type="checkbox"
-                      role="switch"
-                      className="switch"
-                      checked={card.qrVisible}
-                      onChange={(e) => dispatch({ type: 'SET_QR_VISIBLE', visible: e.target.checked })}
-                    />
-                    <label htmlFor="qr-visible">
-                      {isArticle ? S.qr.toggleArticle : S.qr.toggleCustom}
-                    </label>
-                  </div>
-                </>
+                  <label htmlFor="qr-visible">{isArticle ? S.qr.toggleArticle : S.qr.toggleCustom}</label>
+                </div>
               )}
-              <button type="button" className="button secondary" onClick={() => dispatch({ type: 'RESET_LAYOUT' })}>
+              <button type="button" className="button ghost" onClick={() => dispatch({ type: 'RESET_LAYOUT' })}>
+                <Icon name="reset" size={18} />
                 {S.layoutReset}
               </button>
             </fieldset>
@@ -816,14 +796,16 @@ export default function PhotocardEditor() {
 
           <section aria-labelledby="export-heading" aria-busy={exporting !== 'idle'}>
             <fieldset>
-              <legend id="export-heading">{S.sections.export}</legend>
+              <SectionHead id="export-heading" step={4} title={S.sections.export.title} hint={S.sections.export.hint} />
               <div className="export-actions">
                 <button
                   type="button"
                   className="button primary"
                   disabled={!canExport || exporting !== 'idle'}
                   onClick={() => void download()}
+                  aria-keyshortcuts="D"
                 >
+                  {exporting === 'download' ? <span className="spinner" aria-hidden="true" /> : <Icon name="download" size={18} />}
                   {exporting === 'download' ? S.export.downloading : S.export.download}
                 </button>
                 <button
@@ -831,19 +813,14 @@ export default function PhotocardEditor() {
                   className="button secondary"
                   disabled={!canExport || exporting !== 'idle'}
                   onClick={() => void copy()}
-                  title={
-                    clipboardSupported
-                      ? S.export.copyTitle
-                      : S.export.copyUnsupportedTitle
-                  }
+                  title={clipboardSupported ? S.export.copyTitle : S.export.copyUnsupportedTitle}
                 >
+                  {exporting === 'copy' ? <span className="spinner" aria-hidden="true" /> : <Icon name="copy" size={18} />}
                   {exporting === 'copy' ? S.export.copying : S.export.copy}
                 </button>
               </div>
               {needsUpload && <p className="field-note">{S.export.needsPhoto}</p>}
-              {!clipboardSupported && (
-                <p className="field-note">{S.export.copyUnsupportedNote}</p>
-              )}
+              {!clipboardSupported && <p className="field-note">{S.export.copyUnsupportedNote}</p>}
             </fieldset>
           </section>
 
@@ -853,155 +830,146 @@ export default function PhotocardEditor() {
         </div>
 
         <section className="preview-stage" aria-label={S.sections.preview} aria-busy={loading || exporting !== 'idle'}>
-          <div className="preview-frame" ref={previewFrameRef} style={box.frame}>
-            <div
-              className={`card ${card.language === 'bn' ? 'bangla' : 'english'}`}
-              lang={card.language}
-              style={box.card}
-            >
-              {template.photo && (
-                <DraggableLayer
-                  label={S.layers.preview.photo}
-                  position={{ x: 0, y: 0 }}
-                  scale={scale}
-                  onMove={(dx, dy) => nudge('photo', dx, dy)}
-                  onKeyDown={onLayerKeyDown('photo')}
-                >
-                  <div
-                    className="photo-window"
-                    style={{
-                      left: template.photo.x,
-                      top: template.photo.y,
-                      width: template.photo.width,
-                      height: template.photo.height,
-                    }}
-                  >
-                    <img
-                      className="photo"
-                      src={card.image.src}
-                      alt=""
-                      draggable={false}
-                      onLoad={(e) => {
-                        const { naturalWidth, naturalHeight } = e.currentTarget;
-                        if (naturalWidth > 0 && naturalHeight > 0) {
-                          setPhotoSize({ width: naturalWidth, height: naturalHeight });
-                        }
-                      }}
-                      style={{
-                        transform: `translate(${card.photoPosition.x}px, ${card.photoPosition.y}px) scale(${card.imageScale})`,
-                      }}
-                    />
-                  </div>
-                </DraggableLayer>
-              )}
-              <img className="card-template" src={template.src} alt="" draggable={false} />
-              <div className="card-date" style={dateStyle(template) as React.CSSProperties}>
-                {card.publicationDate}
-              </div>
-              {credit && (
-                <div
-                  className="card-credit"
-                  style={credit as React.CSSProperties}
-                  aria-hidden={hasTag(card.photoCredit) ? undefined : true}
-                  hidden={!hasTag(card.photoCredit)}
-                >
-                  {card.photoCredit}
-                </div>
-              )}
-              {pill && hasTag(card.photoTag) && (
-                <div className="card-pill" style={pill as React.CSSProperties}>
-                  {card.photoTag}
-                </div>
-              )}
-              <DraggableLayer
-                label={S.layers.preview.title}
-                position={card.titlePosition}
-                scale={scale}
-                onMove={(dx, dy) => nudge('title', dx, dy)}
-                onKeyDown={onLayerKeyDown('title')}
+          <div className="preview-canvas">
+            <div className="preview-frame" ref={previewFrameRef} style={box.frame}>
+              <div
+                key={template.id}
+                className={`card card-enter ${card.language === 'bn' ? 'bangla' : 'english'}`}
+                lang={card.language}
+                style={box.card}
               >
-                <div className="card-title" ref={titleRef} style={titleStyle(template, card) as React.CSSProperties}>
-                  {card.title ? (
-                    titleLines.map((line, i) => (
-                      <div key={i}>
-                        {line.map((token, j) => (
-                          <span key={j} style={token.highlighted ? { color: emphasis } : undefined}>
-                            {token.text}
-                          </span>
-                        ))}
-                      </div>
-                    ))
-                  ) : (
-                    <span className="placeholder">শিরোনাম এখানে</span>
-                  )}
+                {template.photo && (
+                  <DraggableLayer
+                    label={S.layers.preview.photo}
+                    position={{ x: 0, y: 0 }}
+                    scale={scale}
+                    onSelect={() => setSelectedLayer('photo')}
+                    onMove={(dx, dy) => nudge('photo', dx, dy)}
+                    onKeyDown={onLayerKeyDown('photo')}
+                  >
+                    <div
+                      className="photo-window"
+                      style={{
+                        left: template.photo.x,
+                        top: template.photo.y,
+                        width: template.photo.width,
+                        height: template.photo.height,
+                      }}
+                    >
+                      <img
+                        className="photo"
+                        src={card.image.src}
+                        alt=""
+                        draggable={false}
+                        onLoad={(e) => {
+                          const { naturalWidth, naturalHeight } = e.currentTarget;
+                          if (naturalWidth > 0 && naturalHeight > 0) {
+                            setPhotoSize({ width: naturalWidth, height: naturalHeight });
+                          }
+                        }}
+                        style={{
+                          transform: `translate(${card.photoPosition.x}px, ${card.photoPosition.y}px) scale(${card.imageScale})`,
+                        }}
+                      />
+                    </div>
+                  </DraggableLayer>
+                )}
+                <img className="card-template" src={template.src} alt="" draggable={false} />
+                <div className="card-date" style={dateStyle(template) as React.CSSProperties}>
+                  {card.publicationDate}
                 </div>
-              </DraggableLayer>
-              {qr && card.qrVisible && qrDataUrl && (
+                {credit && (
+                  <div
+                    className="card-credit"
+                    style={credit as React.CSSProperties}
+                    aria-hidden={hasTag(card.photoCredit) ? undefined : true}
+                    hidden={!hasTag(card.photoCredit)}
+                  >
+                    {card.photoCredit}
+                  </div>
+                )}
+                {pill && hasTag(card.photoTag) && (
+                  <div className="card-pill" style={pill as React.CSSProperties}>
+                    {card.photoTag}
+                  </div>
+                )}
                 <DraggableLayer
-                  label={S.layers.preview.qr}
-                  position={card.qrPosition}
+                  label={S.layers.preview.title}
+                  position={card.titlePosition}
                   scale={scale}
-                  onMove={(dx, dy) => nudge('qr', dx, dy)}
-                  onKeyDown={onLayerKeyDown('qr')}
+                  onSelect={() => setSelectedLayer('title')}
+                  onMove={(dx, dy) => nudge('title', dx, dy)}
+                  onKeyDown={onLayerKeyDown('title')}
                 >
-                  <div className="qr" style={qr as React.CSSProperties}>
-                    <img
-                      src={qrDataUrl}
-                      alt={isArticle ? S.qr.altArticle : S.qr.altCustom}
-                      draggable={false}
-                    />
+                  <div className="card-title" ref={titleRef} style={titleStyle(template, card) as React.CSSProperties}>
+                    {card.title ? (
+                      titleLines.map((line, i) => (
+                        <div key={i}>
+                          {line.map((token, j) => (
+                            <span key={j} style={token.highlighted ? { color: emphasis } : undefined}>
+                              {token.text}
+                            </span>
+                          ))}
+                        </div>
+                      ))
+                    ) : (
+                      <span className="placeholder">শিরোনাম এখানে</span>
+                    )}
                   </div>
                 </DraggableLayer>
+                {qr && card.qrVisible && qrDataUrl && (
+                  <DraggableLayer
+                    label={S.layers.preview.qr}
+                    position={card.qrPosition}
+                    scale={scale}
+                    onSelect={() => setSelectedLayer('qr')}
+                    onMove={(dx, dy) => nudge('qr', dx, dy)}
+                    onKeyDown={onLayerKeyDown('qr')}
+                  >
+                    <div className="qr" style={qr as React.CSSProperties}>
+                      <img src={qrDataUrl} alt={isArticle ? S.qr.altArticle : S.qr.altCustom} draggable={false} />
+                    </div>
+                  </DraggableLayer>
+                )}
+              </div>
+              {loading && <div className="preview-skeleton" aria-hidden="true" />}
+              {isEmpty && !loading && (
+                <div className="preview-empty">
+                  <StarMark size={40} />
+                  <p className="preview-empty-title">{S.empty.title}</p>
+                  <p>{S.empty.body}</p>
+                </div>
               )}
             </div>
           </div>
           <p className="dimensions">
-            {S.export.previewScale(canvasW, canvasH, scale.toFixed(2))}
+            <span className="badge">{S.export.previewScale(canvasW, canvasH, scale.toFixed(2))}</span>
+          </p>
+          <p className="shortcuts" aria-label={S.shortcuts.label}>
+            {isArticle && (
+              <span>
+                <kbd>G</kbd> {S.shortcuts.generate}
+              </span>
+            )}
+            <span>
+              <kbd>D</kbd> {S.shortcuts.download}
+            </span>
+            <span>
+              <kbd>R</kbd> {S.shortcuts.reset}
+            </span>
+            <span>
+              <kbd>←↑↓→</kbd> {S.shortcuts.nudge}
+            </span>
           </p>
         </section>
       </div>
-    </div>
-  );
-}
 
-function PositionControls(props: {
-  layer: 'photo' | 'title' | 'qr';
-  x: number;
-  y: number;
-  onNudge: (dx: number, dy: number) => void;
-  onReset: () => void;
-  onKeyDown: (event: React.KeyboardEvent) => void;
-}) {
-  const name = S.layers.names[props.layer];
-  const label = S.layers.position[props.layer];
-  return (
-    <div className="position-controls" onKeyDown={props.onKeyDown}>
-      <span className="field-label" id={`${props.layer}-pos-label`}>
-        {label}: {Math.round(props.x)}, {Math.round(props.y)} px
-      </span>
-      <div
-        className="nudge-grid"
-        role="group"
-        aria-labelledby={`${props.layer}-pos-label`}
-        aria-describedby={`${props.layer}-pos-help`}
-      >
-        <button type="button" className="chip" aria-label={S.layers.move(name, 'left')} onClick={() => props.onNudge(-1, 0)}>
-          <Icon name="left" />
-        </button>
-        <button type="button" className="chip" aria-label={S.layers.move(name, 'up')} onClick={() => props.onNudge(0, -1)}>
-          <Icon name="up" />
-        </button>
-        <button type="button" className="chip" aria-label={S.layers.move(name, 'down')} onClick={() => props.onNudge(0, 1)}>
-          <Icon name="down" />
-        </button>
-        <button type="button" className="chip" aria-label={S.layers.move(name, 'right')} onClick={() => props.onNudge(1, 0)}>
-          <Icon name="right" />
-        </button>
-        <button type="button" className="chip" onClick={props.onReset}>
-          {S.layers.reset[props.layer]}
-        </button>
-      </div>
-      <small id={`${props.layer}-pos-help`}>{S.layers.help}</small>
+      {toast && (
+        <div key={toast.id} className={`toast tone-${toast.tone}`} aria-hidden="true">
+          <Icon name={toast.tone === 'success' ? 'check' : 'sparkle'} size={18} />
+          {toast.text}
+        </div>
+      )}
     </div>
   );
 }
@@ -1010,6 +978,7 @@ function DraggableLayer(props: {
   label: string;
   position: { x: number; y: number };
   scale: number;
+  onSelect: () => void;
   onMove: (dx: number, dy: number) => void;
   onKeyDown: (event: React.KeyboardEvent) => void;
   children: React.ReactNode;
@@ -1022,8 +991,10 @@ function DraggableLayer(props: {
       tabIndex={0}
       className="drag-layer"
       style={{ position: 'absolute', inset: 0 }}
+      onFocus={props.onSelect}
       onKeyDown={props.onKeyDown}
       onPointerDown={(e) => {
+        props.onSelect();
         (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
         start.current = { x: e.clientX, y: e.clientY };
       }}
