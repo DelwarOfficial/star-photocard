@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { z } from 'zod';
 import { enforceRateLimit, readBoundedJson } from '../../lib/security/requestLimits';
 import { S } from '../../lib/i18n/strings';
+import { readImageSecret } from '../../lib/security/imageSecret';
 import { extractArticle } from '../../lib/article/extractArticle';
 import { normalizeArticleUrl } from '../../lib/article/normalizeArticleUrl';
 import { fetchArticleHtml, probeImage } from '../../lib/security/boundedFetch';
@@ -72,7 +73,7 @@ export async function handleArticle(request: Request, clientAddress: string | un
     if (!parsed.success) return failure('INVALID_REQUEST', S.api.invalidRequest, 400, requestId);
     const startUrl = normalizeArticleUrl(parsed.data.url);
 
-    const secret = typeof workerEnv.IMAGE_TOKEN_SECRET === 'string' ? workerEnv.IMAGE_TOKEN_SECRET : '';
+    const secret = readImageSecret(workerEnv);
 
     // Short-lived metadata cache (best-effort, token-free hashed key).
     const cacheKey = await hashedArticleCacheKey(startUrl.href, new URL(request.url).origin);
@@ -98,7 +99,7 @@ export async function handleArticle(request: Request, clientAddress: string | un
     let imageUrl: string | undefined;
     // Images are served only through signed /api/image links. Without the secret the
     // article photo cannot be delivered; say so explicitly instead of "no image found".
-    const signingReady = secret.length >= 32;
+    const signingReady = secret !== '';
     let imageNotice: 'signing-unconfigured' | undefined;
     if (!signingReady) {
       if (article.imageCandidates.length > 0) {

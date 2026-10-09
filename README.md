@@ -128,6 +128,26 @@ npm run deploy:production
 
 Use a separate production secret. The deployment scripts rebuild and validate before publishing. [`scripts/environment.mjs`](scripts/environment.mjs) sets `CLOUDFLARE_ENV` before both Astro commands, checks `dist/server/wrangler.json` for the expected Worker name and named limiter namespaces, then invokes Wrangler only for a deploy action. Do not build the default environment and select staging only at deploy time.
 
+### Required secret: `IMAGE_TOKEN_SECRET` (every environment)
+
+Article photos are served only through signed `/api/image` links. **Without this secret the app still runs, but every article card falls back to the demo photo**, and the editor shows "Article photos are turned off on this server" on page load. Set a different random value (at least 32 characters) in each environment:
+
+```sh
+openssl rand -hex 32   # or: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+| Environment | Worker | Command |
+| --- | --- | --- |
+| Live site (Workers Builds, `starphotocard.starnewsdigital1.workers.dev`) | `starphotocard` | `npx wrangler secret put IMAGE_TOKEN_SECRET --name starphotocard` |
+| Staging (`wrangler.jsonc` → `env.staging`) | `star-news-photocard-staging` | `npx wrangler secret put IMAGE_TOKEN_SECRET --env staging` |
+| Production (`wrangler.jsonc` → `env.production`) | `star-news-photocard-production` | `npx wrangler secret put IMAGE_TOKEN_SECRET --env production` |
+| Local dev / `npm run preview` | — | `.dev.vars` (see Quickstart) |
+| CI | — | the workflow writes a throwaway `.dev.vars` per run |
+
+The live Worker is named `starphotocard` in Cloudflare, which differs from `wrangler.jsonc`'s `star-news-photocard` — so it needs `--name`; a plain `wrangler secret put` targets the wrong Worker. Alternatively set it in the dashboard: **Workers & Pages → starphotocard → Settings → Variables and Secrets → Add → Type: Secret**. Secrets persist across Workers Builds deploys.
+
+Check it took effect: `npx wrangler secret list --name starphotocard` lists `IMAGE_TOKEN_SECRET`, and generating a card from an article with a photo shows that photo (no signing warning in the status line).
+
 The app deploys to **Cloudflare Workers**, with static assets and SSR/API routes, not Cloudflare Pages. Current configuration uses compatibility date `2026-09-04`, `nodejs_compat`, and observability. The GitHub CI workflow validates changes; it does not deploy them.
 
 ## Testing

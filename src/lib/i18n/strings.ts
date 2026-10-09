@@ -8,6 +8,10 @@ export const UI_LANG = 'en';
 export type LayerKey = 'photo' | 'title' | 'qr';
 
 export const S = {
+  signing: {
+    title: 'Article photos are turned off on this server',
+    body: 'IMAGE_TOKEN_SECRET isn’t set (or is shorter than 32 characters), so cards will use the demo photo. Ask whoever deploys this app to add the secret — see README → Deployment. Your own uploads still work.',
+  },
   footer: {
     builtBy: 'Built by',
     author: 'Delwar Hossain',

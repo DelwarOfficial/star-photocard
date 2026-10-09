@@ -154,6 +154,8 @@ test.describe('photocard generator', () => {
     await expect(page.getByRole('heading', { name: 'Photocard Generator' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Download PNG' })).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Copy PNG' })).toBeDisabled();
+    // With a configured secret (CI writes one to .dev.vars) the signing warning must not appear.
+    await expect(page.locator('.config-warning')).toHaveCount(0);
     // Auto-date: today in Bengali, already on the card and in the editable field.
     await expect(page.getByLabel('Date', { exact: true })).toHaveValue(todayBanglaDate());
     await expect(page.locator('.card-date')).toHaveText(todayBanglaDate());

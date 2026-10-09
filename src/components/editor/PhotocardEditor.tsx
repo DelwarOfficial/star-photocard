@@ -69,7 +69,8 @@ function exportFailureMessage(err: unknown, action: 'download' | 'copy'): string
   return S.status.exportFailed(action);
 }
 
-export default function PhotocardEditor() {
+/** imageSigningReady: false when the server has no usable IMAGE_TOKEN_SECRET (set by the page). */
+export default function PhotocardEditor({ imageSigningReady = true }: { imageSigningReady?: boolean }) {
   // Keep SSR and the first client render stable; auto-fill the Dhaka date after mount.
   const [card, rawDispatch] = useReducer(cardReducer, undefined, () => createCardState(''));
   useEffect(() => { rawDispatch({ type: 'INITIALIZE_DATE', date: todayBanglaDate() }); }, []);
@@ -589,6 +590,12 @@ export default function PhotocardEditor() {
 
       <div className="workspace">
         <div className="controls" aria-label={S.sections.controls}>
+          {!imageSigningReady && (
+            <div className="config-warning" role="alert">
+              <strong>{S.signing.title}</strong>
+              <p>{S.signing.body}</p>
+            </div>
+          )}
           <section aria-labelledby="type-heading">
             <fieldset disabled={exporting !== 'idle'}>
               <SectionHead id="type-heading" step={1} title={S.sections.type.title} hint={S.sections.type.hint} />

@@ -1,4 +1,5 @@
 import type { APIRoute } from 'astro';
+import { readImageSecret } from '../../lib/security/imageSecret';
 import { z } from 'zod';
 import { enforceRateLimit } from '../../lib/security/requestLimits';
 import { isStarNewsHost } from '../../lib/article/normalizeArticleUrl';
@@ -31,7 +32,8 @@ export async function handleImage(request: Request, workerEnv: Record<string, un
   const limited = await enforceRateLimit(workerEnv.IMAGE_RATE_LIMITER,
     'image:' + (request.headers.get('cf-connecting-ip') ?? 'unknown'), crypto.randomUUID());
   if (limited) return limited;
-  const secret = typeof workerEnv.IMAGE_TOKEN_SECRET === 'string' ? workerEnv.IMAGE_TOKEN_SECRET : '';
+  // Same rule as /api/article (≥32 chars); a too-short secret must not verify tokens either.
+  const secret = readImageSecret(workerEnv);
   if (!secret) return failure(500, 'Image service is not configured.');
 
   const url = new URL(request.url);
