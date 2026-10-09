@@ -1,4 +1,6 @@
-import { CARD_HEIGHT, CARD_WIDTH, type Point, type Rect } from '../../config/templates';
+import { CARD_HEIGHT, CARD_WIDTH, type Point, type Rect, type Size } from '../../config/templates';
+
+const DEFAULT_CANVAS: Size = { width: CARD_WIDTH, height: CARD_HEIGHT };
 
 export type ImageGeometry = Readonly<Rect & { scale: number }>;
 
@@ -29,10 +31,11 @@ export function coverGeometry(
   };
 }
 
-export function previewScale(width: number, height = Number.POSITIVE_INFINITY): number {
+/** Scale that fits the active template's canvas into a preview box (never upscales). */
+export function previewScale(width: number, height = Number.POSITIVE_INFINITY, canvas: Size = DEFAULT_CANVAS): number {
   if (!Number.isFinite(width) || width < 0) return 0;
   if (height !== Number.POSITIVE_INFINITY && (!Number.isFinite(height) || height < 0)) return 0;
-  return Math.min(width / CARD_WIDTH, height / CARD_HEIGHT, 1);
+  return Math.min(width / canvas.width, height / canvas.height, 1);
 }
 
 /** Keep the photo covering its viewport: clamp drag offsets to drawn overflow. */
@@ -51,10 +54,10 @@ export function clampPhotoOffset(
   };
 }
 
-/** Keep a box fully inside the 1080x1080 canvas. */
-export function clampToCanvas(position: Point, size: Readonly<{ width: number; height: number }>): Point {
+/** Keep a box fully inside the active template's canvas. */
+export function clampToCanvas(position: Point, size: Size, canvas: Size = DEFAULT_CANVAS): Point {
   return {
-    x: Math.min(CARD_WIDTH - size.width, Math.max(0, position.x)),
-    y: Math.min(CARD_HEIGHT - size.height, Math.max(0, position.y)),
+    x: Math.min(canvas.width - size.width, Math.max(0, position.x)),
+    y: Math.min(canvas.height - size.height, Math.max(0, position.y)),
   };
 }

@@ -49,10 +49,14 @@ Redirecting this brief toward generic aesthetics is failure.
 
 ## Card model
 
-- Square 1080 × 1080 canvas; every layer position lives in
+- Portrait 1080 × 1350 canvas (4:5, artwork 1600 × 2000); every layer position lives in
   `src/config/templates.ts` in intrinsic pixels — no magic numbers in
   components, CSS, or the exporter. Preview, drag bounds, and export must
-  agree through the shared cover-geometry function.
+  agree through the shared cover-geometry function; text/QR layer styles
+  come from `src/lib/card/layerStyles.ts` for both preview and export.
+- Two creation modes: article cards (URL fetch) and custom cards
+  (`just-in`: upload + text, `breaking-news`: text only). Every card is
+  auto-dated with today's Bengali date. Headline highlight is `#FFF200`.
 
 ## Next-generation mockups (captured, NOT yet implemented)
 

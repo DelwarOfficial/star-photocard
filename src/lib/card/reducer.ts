@@ -1,5 +1,5 @@
 import { getTemplate } from '../../config/templates';
-import { FALLBACK_IMAGE_SRC, initialCardState, type CardState } from './types';
+import { createCardState, layoutDefaults, type CardState } from './types';
 
 export type CardAction =
   | Readonly<{ type: 'SET_SOURCE_URL'; url: string }>
@@ -8,7 +8,6 @@ export type CardAction =
       type: 'GENERATE_SUCCESS';
       articleUrl: string;
       title: string;
-      publicationDate: string;
       language: CardState['language'];
       imageSrc: string;
       imageKind: CardState['image']['kind'];
@@ -30,7 +29,8 @@ export type CardAction =
   | Readonly<{ type: 'RESET_PHOTO' }>
   | Readonly<{ type: 'RESET_TITLE' }>
   | Readonly<{ type: 'RESET_QR' }>
-  | Readonly<{ type: 'FULL_RESET' }>;
+  /** date: the auto-date for the fresh card (defaults to today's Bengali date). */
+  | Readonly<{ type: 'FULL_RESET'; date?: string; templateId?: string }>;
 
 export function clampFontSize(size: number): number {
   if (!Number.isFinite(size)) return 75;
@@ -53,7 +53,7 @@ export function cardReducer(state: CardState, action: CardAction): CardState {
         ...state,
         articleUrl: action.articleUrl,
         title: action.title,
-        publicationDate: action.publicationDate,
+        // The card date is always today's (or the user's edit); the article date is not used.
         language: action.language,
         image: { kind: action.imageKind, src: action.imageSrc },
         imageScale: 1,
@@ -104,11 +104,9 @@ export function cardReducer(state: CardState, action: CardAction): CardState {
       return {
         ...state,
         templateId: template.id,
-        fontSize: Math.min(state.fontSize, template.title.maxFontSize),
+        ...layoutDefaults(template),
         imageScale: 1,
         photoPosition: { x: 0, y: 0 },
-        titlePosition: { x: template.title.x, y: template.title.y },
-        qrPosition: { x: template.qr.x, y: template.qr.y },
         isDirty: true,
       };
     }
@@ -116,11 +114,9 @@ export function cardReducer(state: CardState, action: CardAction): CardState {
       const template = getTemplate(state.templateId);
       return {
         ...state,
-        fontSize: template.title.defaultFontSize,
+        ...layoutDefaults(template),
         imageScale: 1,
         photoPosition: { x: 0, y: 0 },
-        titlePosition: { x: template.title.x, y: template.title.y },
-        qrPosition: { x: template.qr.x, y: template.qr.y },
         qrVisible: true,
         isDirty: true,
       };
@@ -131,7 +127,7 @@ export function cardReducer(state: CardState, action: CardAction): CardState {
       const template = getTemplate(state.templateId);
       return {
         ...state,
-        titlePosition: { x: template.title.x, y: template.title.y },
+        titlePosition: layoutDefaults(template).titlePosition,
         fontSize: template.title.defaultFontSize,
         isDirty: true,
       };
@@ -140,13 +136,18 @@ export function cardReducer(state: CardState, action: CardAction): CardState {
       const template = getTemplate(state.templateId);
       return {
         ...state,
-        qrPosition: { x: template.qr.x, y: template.qr.y },
+        qrPosition: layoutDefaults(template).qrPosition,
         qrVisible: true,
         isDirty: true,
       };
     }
-    case 'FULL_RESET':
-      return { ...initialCardState, image: { kind: 'fallback', src: FALLBACK_IMAGE_SRC } };
+    case 'FULL_RESET': {
+      // A reset keeps the chosen card type so a custom-mode user stays in custom mode.
+      const fresh = createCardState(action.date);
+      if (!action.templateId) return fresh;
+      const template = getTemplate(action.templateId);
+      return { ...fresh, templateId: template.id, language: template.language, ...layoutDefaults(template) };
+    }
     default:
       return state;
   }

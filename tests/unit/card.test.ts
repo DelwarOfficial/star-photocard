@@ -1,13 +1,13 @@
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { CARD_HEIGHT, CARD_WIDTH, templates } from '../../src/config/templates';
+import { CARD_HEIGHT, CARD_WIDTH, templates, templatesForMode } from '../../src/config/templates';
 import { coverGeometry, clampPhotoOffset, clampToCanvas, previewScale } from '../../src/lib/card/geometry';
 import { titleFontSize, tokenizeTitle } from '../../src/lib/card/highlightTitle';
 import { normalizePhotoTag, countCodePoints } from '../../src/lib/card/photoTag';
 import { cardReducer } from '../../src/lib/card/reducer';
-import { initialCardState } from '../../src/lib/card/types';
-import { formatDhakaDate, parseArticleDate, toBanglaDigits } from '../../src/lib/text/dates';
+import { createCardState, initialCardState } from '../../src/lib/card/types';
+import { formatDhakaDate, parseArticleDate, toBanglaDigits, todayBanglaDate } from '../../src/lib/text/dates';
 
 describe('card geometry', () => {
   it('covers a landscape photo viewport', () => {
@@ -45,13 +45,20 @@ describe('card geometry', () => {
     expect(redrawn.y).toBeLessThanOrEqual(viewport.y + 1e-6);
     expect(redrawn.x + redrawn.width).toBeGreaterThanOrEqual(viewport.x + viewport.width - 1e-6);
   });
-  it('keeps title and QR inside the canvas', () => {
-    expect(clampToCanvas({ x: -50, y: 1400 }, { width: 1040, height: 120 })).toEqual({ x: 0, y: 960 });
+  it('keeps title and QR inside the active canvas', () => {
+    // Default canvas is the 1080 × 1350 portrait card.
+    expect(clampToCanvas({ x: -50, y: 1400 }, { width: 1040, height: 120 })).toEqual({ x: 0, y: 1230 });
     expect(clampToCanvas({ x: 2000, y: -20 }, { width: 134, height: 134 })).toEqual({ x: 946, y: 0 });
+    // Any other canvas size is honoured.
+    expect(clampToCanvas({ x: 2000, y: 2000 }, { width: 100, height: 100 }, { width: 500, height: 800 })).toEqual({
+      x: 400,
+      y: 700,
+    });
   });
-  it('caps preview scale at one', () => {
+  it('caps preview scale at one and fits the template canvas', () => {
     expect(previewScale(2160, 2700)).toBe(1);
     expect(previewScale(540)).toBeCloseTo(0.5, 5);
+    expect(previewScale(540, 540, { width: 1080, height: 1350 })).toBeCloseTo(0.4, 5);
   });
 });
 
@@ -120,20 +127,70 @@ describe('dates', () => {
 });
 
 describe('template registry', () => {
-  it('ships square templates with layers inside the canvas', () => {
+  it('ships six 1080 × 1350 templates with layers inside their canvas', () => {
     expect(CARD_WIDTH).toBe(1080);
-    expect(CARD_HEIGHT).toBe(1080);
-    expect(templates.map((t) => t.id)).toEqual(['common-card', 'just-in']);
+    expect(CARD_HEIGHT).toBe(1350);
+    expect(templates.map((t) => t.id)).toEqual([
+      'common-card',
+      'common-card-bottom',
+      'special-card-top',
+      'special-card-bottom',
+      'just-in',
+      'breaking-news',
+    ]);
+    const inside = (box: { x: number; y: number; width: number; height: number }, canvas: { width: number; height: number }) => {
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(canvas.width);
+      expect(box.y + box.height).toBeLessThanOrEqual(canvas.height);
+    };
     for (const template of templates) {
-      expect(template.canvas).toEqual({ width: 1080, height: 1080 });
-      expect(template.photo.x + template.photo.width).toBeLessThanOrEqual(1080);
-      expect(template.photo.y + template.photo.height).toBeLessThanOrEqual(1080);
-      expect(template.title.x + template.title.width).toBeLessThanOrEqual(1080);
-      expect(template.qr.x + template.qr.width).toBeLessThanOrEqual(1080);
-      expect(template.qr.y + template.qr.height).toBeLessThanOrEqual(1080);
+      const { canvas } = template;
+      expect(canvas).toEqual({ width: 1080, height: 1350 });
+      if (template.photo) inside(template.photo, canvas);
+      if (template.qr) inside(template.qr, canvas);
+      if (template.photoTag) inside(template.photoTag, canvas);
+      inside({ ...template.date, height: template.date.fontSize }, canvas);
+      expect(template.title.x + template.title.width).toBeLessThanOrEqual(canvas.width);
+      expect(template.title.y).toBeLessThan(canvas.height);
       expect(template.title.maxFontSize).toBeLessThanOrEqual(120);
       expect(template.title.defaultFontSize).toBeLessThanOrEqual(template.title.maxFontSize);
     }
+  });
+  it('declares the two creation modes and their per-template flow fields', () => {
+    const byId = Object.fromEntries(templates.map((t) => [t.id, t]));
+    expect(templatesForMode('article').map((t) => t.id)).toEqual([
+      'common-card',
+      'common-card-bottom',
+      'special-card-top',
+      'special-card-bottom',
+    ]);
+    expect(templatesForMode('custom').map((t) => t.id)).toEqual(['just-in', 'breaking-news']);
+    // just-in: upload + text, QR (root domain), two meta rows.
+    expect(byId['just-in']).toMatchObject({ requiresImage: true, metaRows: 2 });
+    for (const t of templates) expect(t.qr, t.id).not.toBeNull();
+    // QR sits bottom-right, left of the meta stack's icons (artwork x ≈ 1238 → 836 here).
+    for (const t of templates) expect(t.qr!.x + t.qr!.width, t.id).toBeLessThan(836);
+    expect(byId['just-in']!.photo).not.toBeNull();
+    // breaking-news: text only — no photo at all; black headline, no emphasis colour.
+    expect(byId['breaking-news']).toMatchObject({
+      requiresImage: false,
+      photo: null,
+      titleColor: '#000000',
+      titleShadow: false,
+      highlightColor: null,
+      dateColor: '#000000',
+    });
+    for (const t of templatesForMode('article')) {
+      expect(t.requiresImage).toBe(false);
+      expect(t.metaRows).toBe(3);
+      expect(t.qr).not.toBeNull();
+      expect(t.dateAlign).toBe('left');
+      expect(t.highlightColor).toBe('#FFF200');
+    }
+    // Photo overlays get a text shadow; panel cards do not.
+    expect(byId['special-card-top']!.titleShadow).toBe(true);
+    expect(byId['common-card']!.titleShadow).toBe(false);
   });
   it('points every template and thumbnail at a shipped asset', () => {
     for (const template of templates) {
@@ -151,7 +208,6 @@ describe('reducer', () => {
       type: 'GENERATE_SUCCESS',
       articleUrl: 'https://www.starnews.com.bd/a',
       title: 'Hello',
-      publicationDate: '৪ সেপ্টেম্বর ২০২৬',
       language: 'bn',
       imageSrc: '/api/image?token=x',
       imageKind: 'remote',
@@ -169,8 +225,8 @@ describe('reducer', () => {
     // Layout follows the new template's geometry.
     const justIn = templates.find((t) => t.id === 'just-in')!;
     expect(state.titlePosition).toEqual({ x: justIn.title.x, y: justIn.title.y });
-    expect(state.qrPosition).toEqual({ x: justIn.qr.x, y: justIn.qr.y });
-    expect(state.fontSize).toBe(justIn.title.maxFontSize);
+    expect(state.qrPosition).toEqual({ x: justIn.qr!.x, y: justIn.qr!.y });
+    expect(state.fontSize).toBe(justIn.title.defaultFontSize);
     expect(state.imageScale).toBe(1);
     state = cardReducer(state, { type: 'GENERATE_START' });
     state = cardReducer(state, { type: 'GENERATE_ERROR' });
@@ -179,6 +235,30 @@ describe('reducer', () => {
     expect(state.imageScale).toBe(1);
     state = cardReducer(state, { type: 'FULL_RESET' });
     expect(state).toEqual(initialCardState);
+  });
+  it('auto-dates every new and reset card in Bengali', () => {
+    const today = todayBanglaDate();
+    expect(initialCardState.publicationDate).toBe(today);
+    expect(createCardState().publicationDate).toBe(today);
+    expect(todayBanglaDate(new Date('2026-10-09T06:00:00Z'))).toBe('০৯ অক্টোবর ২০২৬');
+    // Late UTC evening is already the next day in Dhaka (UTC+6).
+    expect(todayBanglaDate(new Date('2026-10-09T19:00:00Z'))).toBe('১০ অক্টোবর ২০২৬');
+    const edited = cardReducer(initialCardState, { type: 'SET_DATE', date: 'custom' });
+    // Fetching an article never replaces the card date.
+    const fetched = cardReducer(initialCardState, {
+      type: 'GENERATE_SUCCESS',
+      articleUrl: 'https://www.starnews.com.bd/a',
+      title: 'x',
+      language: 'bn',
+      imageSrc: '/p.jpg',
+      imageKind: 'remote',
+    });
+    expect(fetched.publicationDate).toBe(today);
+    const reset = cardReducer(edited, { type: 'FULL_RESET', date: '১ জানুয়ারি ২০২৭', templateId: 'breaking-news' });
+    expect(reset.publicationDate).toBe('১ জানুয়ারি ২০২৭');
+    // A reset keeps the chosen card type and its layout defaults.
+    expect(reset.templateId).toBe('breaking-news');
+    expect(reset.titlePosition).toEqual({ x: templates[5]!.title.x, y: templates[5]!.title.y });
   });
   it('clamps font and zoom bounds', () => {
     expect(cardReducer(initialCardState, { type: 'SET_FONT_SIZE', size: 10 }).fontSize).toBe(30);

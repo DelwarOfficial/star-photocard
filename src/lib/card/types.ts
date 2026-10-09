@@ -1,4 +1,5 @@
-import { defaultTemplate, type Language, type Point } from '../../config/templates';
+import { defaultTemplate, type Language, type Point, type TemplateDefinition } from '../../config/templates';
+import { todayBanglaDate } from '../text/dates';
 
 export type ImageKind = 'fallback' | 'remote' | 'local';
 
@@ -24,7 +25,21 @@ export type CardState = Readonly<{
 
 export const FALLBACK_IMAGE_SRC = '/photos/default-news.jpg';
 
-export const initialCardState: CardState = {
+/** Per-template layer defaults (title box, font size, QR spot). */
+export function layoutDefaults(template: TemplateDefinition): Pick<CardState, 'fontSize' | 'titlePosition' | 'qrPosition'> {
+  return {
+    fontSize: template.title.defaultFontSize,
+    titlePosition: { x: template.title.x, y: template.title.y },
+    qrPosition: template.qr ? { x: template.qr.x, y: template.qr.y } : { x: 0, y: 0 },
+  };
+}
+
+/** A fresh card; the date defaults to today's Bengali date (auto-date) and stays editable. */
+export function createCardState(publicationDate: string = todayBanglaDate()): CardState {
+  return { ...baseCardState, publicationDate };
+}
+
+const baseCardState: CardState = {
   sourceUrl: '',
   articleUrl: '',
   title: '',
@@ -33,15 +48,15 @@ export const initialCardState: CardState = {
   templateId: defaultTemplate.id,
   image: { kind: 'fallback', src: FALLBACK_IMAGE_SRC },
   photoTag: '',
-  fontSize: defaultTemplate.title.defaultFontSize,
   imageScale: 1,
   photoPosition: { x: 0, y: 0 },
-  titlePosition: { x: defaultTemplate.title.x, y: defaultTemplate.title.y },
-  qrPosition: { x: defaultTemplate.qr.x, y: defaultTemplate.qr.y },
+  ...layoutDefaults(defaultTemplate),
   qrVisible: true,
   loadStatus: 'idle',
   isDirty: false,
 };
+
+export const initialCardState: CardState = createCardState();
 
 /** Backwards-compatible aliases used by the first editor slice. */
 export type LegacyCardStatus = CardState['loadStatus'];

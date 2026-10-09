@@ -2,6 +2,7 @@ import html2canvas from 'html2canvas';
 import { getTemplate } from '../../config/templates';
 import { coverGeometry } from './geometry';
 import { tokenizeTitle } from './highlightTitle';
+import { applyStyle, dateStyle, highlightColor, pillStyle, qrStyle, titleStyle } from './layerStyles';
 import { decodeImage, waitForFonts, type CardRenderer, type ExportSnapshot } from './renderer';
 
 /**
@@ -10,11 +11,9 @@ import { decodeImage, waitForFonts, type CardRenderer, type ExportSnapshot } fro
  * so preview, bounds and export agree. Animated GIF input exports its decoded
  * first frame (browser decoding behavior); documented in README.
  *
- * Text layers must mirror the preview (.card-title / .highlight in
- * global.css): same brand font family, weights and highlight colour.
+ * Text and QR layers take their styles from layerStyles.ts, the same
+ * source the preview uses, so the two cannot drift apart.
  */
-const HIGHLIGHT_COLOR = '#ff0';
-
 function cardFontFamily(language: string): string {
   return language === 'en' ? 'StarEnglish' : 'StarBangla';
 }
@@ -31,6 +30,7 @@ export class Html2CanvasRenderer implements CardRenderer {
   readonly name = 'html2canvas';
 
   async render(snapshot: ExportSnapshot): Promise<Blob> {
+    const template = getTemplate(snapshot.state.templateId);
     const fontFamily = cardFontFamily(snapshot.state.language);
     await loadCardFonts(fontFamily);
     await waitForFonts();
@@ -40,15 +40,16 @@ export class Html2CanvasRenderer implements CardRenderer {
       decodeImage(snapshot.templateSrc).catch(() => {
         throw new Error('TEMPLATE_UNAVAILABLE');
       }),
-      decodeImage(snapshot.photoSrc).catch(() => {
-        throw new Error('PHOTO_UNAVAILABLE');
-      }),
+      template.photo
+        ? decodeImage(snapshot.photoSrc).catch(() => {
+            throw new Error('PHOTO_UNAVAILABLE');
+          })
+        : Promise.resolve(null),
     ]);
     if (snapshot.qrDataUrl) {
       await decodeImage(snapshot.qrDataUrl).catch(() => undefined);
     }
 
-    const template = getTemplate(snapshot.state.templateId);
     const canvasWidth = template.canvas.width;
     const canvasHeight = template.canvas.height;
 
@@ -57,29 +58,29 @@ export class Html2CanvasRenderer implements CardRenderer {
     container.style.cssText = `position:fixed;left:-9999px;top:0;width:${canvasWidth}px;height:${canvasHeight}px;overflow:hidden;background:#fff;`;
 
     try {
-      container.innerHTML = '';
       const card = document.createElement('div');
+      card.lang = snapshot.state.language;
       card.style.cssText = `position:relative;width:${canvasWidth}px;height:${canvasHeight}px;overflow:hidden;background:#fff;font-family:${fontFamily},serif;`;
       container.appendChild(card);
 
-      // Photo layer with explicit cover geometry.
+      // Photo layer with explicit cover geometry (cards without a photo window skip it).
       const photoViewport = template.photo;
-      const naturalWidth = photoImg.naturalWidth || 1920;
-      const naturalHeight = photoImg.naturalHeight || 1080;
-      const drawn = coverGeometry(
-        { width: naturalWidth, height: naturalHeight },
-        photoViewport,
-        snapshot.state.imageScale,
-        snapshot.state.photoPosition,
-      );
-      const photoWindow = document.createElement('div');
-      photoWindow.style.cssText = `position:absolute;left:${photoViewport.x}px;top:${photoViewport.y}px;width:${photoViewport.width}px;height:${photoViewport.height}px;overflow:hidden;`;
-      const photo = document.createElement('img');
-      photo.crossOrigin = 'anonymous';
-      photo.src = photoImg.src;
-      photo.style.cssText = `position:absolute;left:${drawn.x - photoViewport.x}px;top:${drawn.y - photoViewport.y}px;width:${drawn.width}px;height:${drawn.height}px;max-width:none;`;
-      photoWindow.appendChild(photo);
-      card.appendChild(photoWindow);
+      if (photoViewport && photoImg) {
+        const drawn = coverGeometry(
+          { width: photoImg.naturalWidth || 1920, height: photoImg.naturalHeight || 1080 },
+          photoViewport,
+          snapshot.state.imageScale,
+          snapshot.state.photoPosition,
+        );
+        const photoWindow = document.createElement('div');
+        photoWindow.style.cssText = `position:absolute;left:${photoViewport.x}px;top:${photoViewport.y}px;width:${photoViewport.width}px;height:${photoViewport.height}px;overflow:hidden;`;
+        const photo = document.createElement('img');
+        photo.crossOrigin = 'anonymous';
+        photo.src = photoImg.src;
+        photo.style.cssText = `position:absolute;left:${drawn.x - photoViewport.x}px;top:${drawn.y - photoViewport.y}px;width:${drawn.width}px;height:${drawn.height}px;max-width:none;`;
+        photoWindow.appendChild(photo);
+        card.appendChild(photoWindow);
+      }
 
       // Template overlay.
       const overlay = document.createElement('img');
@@ -88,36 +89,39 @@ export class Html2CanvasRenderer implements CardRenderer {
       overlay.style.cssText = `position:absolute;inset:0;width:${canvasWidth}px;height:${canvasHeight}px;`;
       card.appendChild(overlay);
 
-      // Date / tag / title are rendered as plain text nodes (no editor chrome).
+      // Text layers share their styles with the preview (layerStyles.ts).
       const date = document.createElement('div');
       date.textContent = snapshot.state.publicationDate;
-      date.style.cssText = `position:absolute;left:${template.date.x}px;top:${template.date.y}px;width:${template.date.width}px;text-align:center;color:#fff;font-size:${template.date.fontSize}px;font-weight:900;`;
+      applyStyle(date, dateStyle(template));
       card.appendChild(date);
 
-      if (snapshot.state.photoTag) {
+      const pill = pillStyle(template);
+      if (pill && snapshot.state.photoTag) {
         const tag = document.createElement('div');
         tag.textContent = snapshot.state.photoTag;
-        tag.style.cssText = `position:absolute;left:${template.photoTag.x}px;top:${template.photoTag.y}px;max-width:${template.photoTag.maxWidth}px;padding:10px 20px;border-left:8px solid #d71920;background:rgba(0,0,0,.78);color:#fff;font-size:${template.photoTag.fontSize}px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
+        applyStyle(tag, pill);
         card.appendChild(tag);
       }
 
       const title = document.createElement('div');
-      title.style.cssText = `position:absolute;left:${snapshot.state.titlePosition.x}px;top:${snapshot.state.titlePosition.y}px;width:${template.title.width}px;text-align:center;color:#fff;font-weight:900;line-height:1.3;font-size:${snapshot.state.fontSize}px;text-shadow:2px 2px 5px rgba(0,0,0,.6);white-space:pre-line;`;
+      applyStyle(title, titleStyle(template, snapshot.state));
+      const emphasis = highlightColor(template);
       for (const line of tokenizeTitle(snapshot.state.title)) {
         const lineEl = document.createElement('div');
         for (const token of line) {
           const span = document.createElement('span');
           span.textContent = token.text;
-          if (token.highlighted) span.style.color = HIGHLIGHT_COLOR;
+          if (token.highlighted) span.style.color = emphasis;
           lineEl.appendChild(span);
         }
         title.appendChild(lineEl);
       }
       card.appendChild(title);
 
-      if (snapshot.state.qrVisible && snapshot.qrDataUrl) {
+      const qr = qrStyle(template, snapshot.state);
+      if (qr && snapshot.state.qrVisible && snapshot.qrDataUrl) {
         const qrBox = document.createElement('div');
-        qrBox.style.cssText = `position:absolute;left:${snapshot.state.qrPosition.x}px;top:${snapshot.state.qrPosition.y}px;width:${template.qr.width}px;height:${template.qr.height}px;padding:${template.qr.inset}px;background:#fff;border-radius:10px;box-sizing:border-box;`;
+        applyStyle(qrBox, qr);
         const qrImg = document.createElement('img');
         qrImg.src = snapshot.qrDataUrl;
         qrImg.style.cssText = 'width:100%;height:100%;display:block;';

@@ -1,20 +1,20 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { CARD_HEIGHT, getTemplate, templates } from '../../config/templates';
+import { getTemplate, SITE_URL, templatesForMode, type CardMode, type TemplateDefinition } from '../../config/templates';
 import { titleFontSize, tokenizeTitle } from '../../lib/card/highlightTitle';
 import { defaultRenderer } from '../../lib/card/html2canvasRenderer';
 import { clampPhotoOffset, clampToCanvas, previewScale } from '../../lib/card/geometry';
 import { normalizePhotoTag, PHOTO_TAG_MAX_LENGTH, PHOTO_TAG_PRESETS } from '../../lib/card/photoTag';
 import { cardReducer, clampFontSize, clampZoom } from '../../lib/card/reducer';
 import { downloadFilename, isClipboardSupported } from '../../lib/card/renderer';
+import { highlightColor, pillStyle, qrStyle, dateStyle, titleStyle } from '../../lib/card/layerStyles';
 import { initialCardState } from '../../lib/card/types';
+import { todayBanglaDate } from '../../lib/text/dates';
 import { isStarNewsHost } from '../../lib/article/normalizeArticleUrl';
 
 type ArticlePayload = {
   canonicalUrl: string;
   title: string;
-  formattedDate: string;
-  dateSource: string;
   language: 'bn' | 'en';
   imageUrl?: string;
 };
@@ -22,6 +22,20 @@ type ArticlePayload = {
 type StatusTone = 'info' | 'success' | 'warning' | 'error';
 
 const TITLE_SIZES = [44, 52, 60, 75];
+
+const MODE_COPY: Record<CardMode, { label: string; hint: string }> = {
+  article: { label: 'Article card', hint: 'Fetch the headline, photo and date from a Star News URL.' },
+  custom: { label: 'Custom card', hint: 'No URL — write the headline yourself.' },
+};
+
+/** Inline sizing for the card + frame; replaces the old fixed 1080 × 1080 CSS. */
+function canvasBox(template: TemplateDefinition, scale: number) {
+  const { width, height } = template.canvas;
+  return {
+    frame: { aspectRatio: `${width} / ${height}` },
+    card: { width, height, transform: `scale(${scale})`, transformOrigin: 'top left' },
+  };
+}
 
 function validateSourceUrl(raw: string): string | null {
   const value = raw.trim();
@@ -52,7 +66,7 @@ export default function PhotocardEditor() {
   const [card, dispatch] = useReducer(cardReducer, initialCardState);
   const [status, setStatus] = useState<{ tone: StatusTone; text: string }>({
     tone: 'info',
-    text: 'Paste a Star News article URL to begin. Export stays disabled until a card is ready.',
+    text: 'Choose a card type, then fill in its inputs. Today’s date is added automatically.',
   });
   const [urlError, setUrlError] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState('');
@@ -66,16 +80,20 @@ export default function PhotocardEditor() {
   const previewFrameRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLDivElement>(null);
   // Real rendered title height (card px; CSS transforms do not affect offsetHeight) for drag bounds.
-  const titleHeight = (): number => Math.min(CARD_HEIGHT, titleRef.current?.offsetHeight || card.fontSize * 1.3);
   const [previewWidth, setPreviewWidth] = useState(540);
 
   const template = useMemo(() => getTemplate(card.templateId), [card.templateId]);
+  const titleHeight = (): number =>
+    Math.min(template.canvas.height, titleRef.current?.offsetHeight || card.fontSize * 1.3);
+  // Article cards encode the reference news link; custom cards have none, so they encode the root domain.
+  const qrTarget = template.qr ? (template.mode === 'article' ? card.articleUrl : SITE_URL) : '';
   const titleLines = useMemo(() => tokenizeTitle(card.title), [card.title]);
   // Intrinsic size of the displayed photo; drag bounds must use the same cover math as export.
   const [photoSize, setPhotoSize] = useState({ width: 1920, height: 1080 });
   // A finished composition stays exportable after a failed or cancelled refetch.
-  const canExport = card.loadStatus !== 'loading' && card.title.trim() !== '';
-  const scale = useMemo(() => previewScale(previewWidth, Number.POSITIVE_INFINITY), [previewWidth]);
+  const needsUpload = template.requiresImage && card.image.kind !== 'local';
+  const canExport = card.loadStatus !== 'loading' && card.title.trim() !== '' && !needsUpload;
+  const scale = useMemo(() => previewScale(previewWidth, Number.POSITIVE_INFINITY, template.canvas), [previewWidth, template.canvas]);
   // Computed after mount so SSR and first client render agree (avoids hydration mismatch).
   const [clipboardSupported, setClipboardSupported] = useState(false);
 
@@ -95,12 +113,12 @@ export default function PhotocardEditor() {
   }, []);
 
   useEffect(() => {
-    if (!card.articleUrl || !card.qrVisible) {
+    if (!qrTarget || !card.qrVisible) {
       setQrDataUrl('');
       return;
     }
     let cancelled = false;
-    QRCode.toDataURL(card.articleUrl, { errorCorrectionLevel: 'M', margin: 0, width: 240 })
+    QRCode.toDataURL(qrTarget, { errorCorrectionLevel: 'M', margin: 0, width: 240 })
       .then((url) => {
         if (!cancelled) setQrDataUrl(url);
       })
@@ -110,7 +128,7 @@ export default function PhotocardEditor() {
     return () => {
       cancelled = true;
     };
-  }, [card.articleUrl, card.qrVisible]);
+  }, [qrTarget, card.qrVisible]);
 
   useEffect(
     () => () => {
@@ -165,7 +183,6 @@ export default function PhotocardEditor() {
         type: 'GENERATE_SUCCESS',
         articleUrl: data.canonicalUrl,
         title: data.title,
-        publicationDate: data.formattedDate,
         language: data.language,
         imageSrc,
         imageKind,
@@ -175,12 +192,7 @@ export default function PhotocardEditor() {
         type: 'SET_FONT_SIZE',
         size: Math.min(titleFontSize(data.title), template.title.maxFontSize),
       });
-      if (data.dateSource === 'fallback-now') {
-        announce(
-          'warning',
-          'Publication date was missing, so today’s Dhaka date was used. You can edit the date field.',
-        );
-      } else if (!data.imageUrl) {
+      if (!data.imageUrl) {
         announce('warning', 'Card generated with the bundled fallback photo because no article image was found.');
       } else {
         announce('success', 'Card generated. Refine the content, then Copy or Download the PNG.');
@@ -252,13 +264,14 @@ export default function PhotocardEditor() {
     setLastRemoteImage(null);
     setCustomTagMode(false);
     setUrlError(null);
-    dispatch({ type: 'FULL_RESET' });
-    announce('info', 'Editor reset. Paste an Star News article URL to begin.');
-  }, [card.isDirty, announce]);
+    dispatch({ type: 'FULL_RESET', date: todayBanglaDate(), templateId: template.id });
+    announce('info', 'Editor reset. Today’s date was filled in again.');
+  }, [card.isDirty, template.id, announce]);
 
   const nudge = useCallback(
     (layer: 'photo' | 'title' | 'qr', dx: number, dy: number) => {
       if (layer === 'photo') {
+        if (!template.photo) return;
         const next = clampPhotoOffset(
           photoSize,
           template.photo,
@@ -270,12 +283,15 @@ export default function PhotocardEditor() {
         const next = clampToCanvas(
           { x: card.titlePosition.x + dx, y: card.titlePosition.y + dy },
           { width: template.title.width, height: titleHeight() },
+          template.canvas,
         );
         dispatch({ type: 'SET_TITLE_POSITION', position: next });
       } else {
+        if (!template.qr) return;
         const next = clampToCanvas(
           { x: card.qrPosition.x + dx, y: card.qrPosition.y + dy },
           { width: template.qr.width, height: template.qr.height },
+          template.canvas,
         );
         dispatch({ type: 'SET_QR_POSITION', position: next });
       }
@@ -326,7 +342,7 @@ export default function PhotocardEditor() {
         document.body.appendChild(link);
         link.click();
         link.remove();
-        announce('success', 'PNG downloaded at exactly 1080 × 1080.');
+        announce('success', `PNG downloaded at exactly ${template.canvas.width} × ${template.canvas.height}.`);
       } finally {
         setTimeout(() => URL.revokeObjectURL(url), 5000);
       }
@@ -335,7 +351,7 @@ export default function PhotocardEditor() {
     } finally {
       setExporting('idle');
     }
-  }, [canExport, exportBlob, announce]);
+  }, [canExport, exportBlob, announce, template.canvas]);
 
   const copy = useCallback(async () => {
     if (!canExport) return;
@@ -363,6 +379,17 @@ export default function PhotocardEditor() {
   }, [canExport, exportBlob, announce]);
 
   const loading = card.loadStatus === 'loading';
+  const isArticle = template.mode === 'article';
+  const box = canvasBox(template, scale);
+  const pill = pillStyle(template);
+  const qr = qrStyle(template, card);
+  const emphasis = highlightColor(template);
+  const { width: canvasW, height: canvasH } = template.canvas;
+
+  const switchTemplate = (id: string) => {
+    setCustomTagMode(false);
+    dispatch({ type: 'SWITCH_TEMPLATE', templateId: id });
+  };
 
   return (
     <div className="app-shell">
@@ -370,18 +397,20 @@ export default function PhotocardEditor() {
         <div>
           <p className="eyebrow">Star News Studio</p>
           <h1>Photocard Generator</h1>
-          <p className="subhead">1080 × 1080 PNG · Star News articles · Bengali + English</p>
+          <p className="subhead">
+            {canvasW} × {canvasH} PNG · Article and custom cards · Bengali
+          </p>
         </div>
         <div className="header-side">
           <p className="header-status" aria-hidden="true">
             {template.label} ·{' '}
-            {card.loadStatus === 'loading'
-              ? 'Fetching…'
-              : card.loadStatus === 'ready'
-                ? 'Ready to export'
-                : card.loadStatus === 'error'
-                  ? 'Needs attention'
-                  : 'Idle'}
+            {needsUpload
+              ? 'Needs a photo'
+              : card.loadStatus === 'loading'
+                ? 'Fetching…'
+                : canExport
+                  ? 'Ready to export'
+                  : 'Needs a headline'}
           </p>
           <button type="button" className="button secondary" onClick={fullReset}>
             Reset
@@ -391,63 +420,113 @@ export default function PhotocardEditor() {
 
       <div className="workspace">
         <div className="controls" aria-label="Photocard controls">
-          <section aria-labelledby="source-heading">
+          <section aria-labelledby="type-heading">
             <fieldset>
-              <legend id="source-heading">1. Source</legend>
-              <label htmlFor="article-url">Star News article URL</label>
-              <input
-                id="article-url"
-                type="url"
-                inputMode="url"
-                autoComplete="url"
-                placeholder="https://starnews.com.bd/…"
-                value={card.sourceUrl}
-                aria-invalid={urlError ? true : undefined}
-                aria-describedby={urlError ? 'article-url-error url-help' : 'url-help'}
-                onChange={(e) => {
-                  dispatch({ type: 'SET_SOURCE_URL', url: e.target.value });
-                  if (urlError) setUrlError(validateSourceUrl(e.target.value));
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    void generate();
-                  }
-                }}
-              />
-              <small id="url-help">Only https Star News URLs (starnews.com.bd and true subdomains) are accepted.</small>
-              {urlError && (
-                <p id="article-url-error" className="field-error" role="alert">
-                  {urlError}
-                </p>
-              )}
-              <div className="input-action">
-                <button
-                  type="button"
-                  className="button primary"
-                  onClick={() => void generate()}
-                  disabled={loading || exporting !== 'idle'}
-                >
-                  {loading ? 'Fetching…' : 'Generate'}
-                </button>
-                {loading && (
-                  <button type="button" className="button secondary" onClick={cancelGenerate}>
-                    Cancel
-                  </button>
-                )}
-              </div>
+              <legend id="type-heading">1. Card type</legend>
+              {(['article', 'custom'] as const).map((mode) => (
+                <div key={mode} className="mode-group">
+                  <span className="field-label" id={`mode-${mode}-label`}>
+                    {MODE_COPY[mode].label}
+                  </span>
+                  <small id={`mode-${mode}-hint`}>{MODE_COPY[mode].hint}</small>
+                  <div
+                    className="template-grid"
+                    role="radiogroup"
+                    aria-labelledby={`mode-${mode}-label`}
+                    aria-describedby={`mode-${mode}-hint`}
+                  >
+                    {templatesForMode(mode).map((item) => (
+                      <label key={item.id} className={item.id === card.templateId ? 'template selected' : 'template'}>
+                        <input
+                          type="radio"
+                          name="template"
+                          value={item.id}
+                          checked={item.id === card.templateId}
+                          onChange={() => switchTemplate(item.id)}
+                        />
+                        <img src={item.thumbnail} alt="" loading="lazy" />
+                        <span>{item.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </fieldset>
           </section>
 
           <section aria-labelledby="content-heading">
             <fieldset>
               <legend id="content-heading">2. Content</legend>
+
+              {isArticle && (
+                <>
+                  <label htmlFor="article-url">Star News article URL</label>
+                  <input
+                    id="article-url"
+                    type="url"
+                    inputMode="url"
+                    autoComplete="url"
+                    placeholder="https://starnews.com.bd/…"
+                    value={card.sourceUrl}
+                    aria-invalid={urlError ? true : undefined}
+                    aria-describedby={urlError ? 'article-url-error url-help' : 'url-help'}
+                    onChange={(e) => {
+                      dispatch({ type: 'SET_SOURCE_URL', url: e.target.value });
+                      if (urlError) setUrlError(validateSourceUrl(e.target.value));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        void generate();
+                      }
+                    }}
+                  />
+                  <small id="url-help">Fetches the headline, photo and date. Everything stays editable.</small>
+                  {urlError && (
+                    <p id="article-url-error" className="field-error" role="alert">
+                      {urlError}
+                    </p>
+                  )}
+                  <div className="input-action">
+                    <button
+                      type="button"
+                      className="button primary"
+                      onClick={() => void generate()}
+                      disabled={loading || exporting !== 'idle'}
+                    >
+                      {loading ? 'Fetching…' : 'Generate'}
+                    </button>
+                    {loading && (
+                      <button type="button" className="button secondary" onClick={cancelGenerate}>
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {template.requiresImage && (
+                <>
+                  <label htmlFor="local-image">Photo (required · JPG, PNG, WebP, GIF ≤ 8 MB)</label>
+                  <input
+                    id="local-image"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    aria-describedby="local-image-help"
+                    onChange={(e) => chooseLocalImage(e.target.files?.[0])}
+                  />
+                  <small id="local-image-help">
+                    {needsUpload ? 'Upload a photo to enable export.' : 'Photo loaded in this browser only.'}
+                  </small>
+                </>
+              )}
+
               <label htmlFor="headline">Headline</label>
               <textarea
                 id="headline"
                 rows={3}
                 value={card.title}
-                placeholder="Article headline"
+                placeholder="শিরোনাম লিখুন"
                 aria-describedby="headline-help headline-stats"
                 onChange={(e) => dispatch({ type: 'SET_TITLE', title: e.target.value })}
               />
@@ -458,113 +537,126 @@ export default function PhotocardEditor() {
                 })()}
               </p>
               <small id="headline-help">
-                Wrap words in *asterisks* to highlight them. Without markup, part of the title highlights
-                automatically. New lines are preserved.
+                {template.highlightColor
+                  ? 'Wrap words in *asterisks* to highlight them in yellow. Without markup, part of the title highlights automatically. New lines are preserved.'
+                  : 'This card has no highlight colour. New lines are preserved.'}
               </small>
 
-              <label htmlFor="pub-date">Publication date</label>
-              <input
-                id="pub-date"
-                type="text"
-                value={card.publicationDate}
-                placeholder="৪ সেপ্টেম্বর ২০২৬"
-                onChange={(e) => dispatch({ type: 'SET_DATE', date: e.target.value })}
-              />
+              <label htmlFor="pub-date">Date</label>
+              <div className="input-action">
+                <input
+                  id="pub-date"
+                  type="text"
+                  value={card.publicationDate}
+                  placeholder={todayBanglaDate()}
+                  aria-describedby="pub-date-help"
+                  onChange={(e) => dispatch({ type: 'SET_DATE', date: e.target.value })}
+                />
+                <button
+                  type="button"
+                  className="button secondary"
+                  onClick={() => dispatch({ type: 'SET_DATE', date: todayBanglaDate() })}
+                >
+                  Today
+                </button>
+              </div>
+              <small id="pub-date-help">Filled in automatically with today’s date. Edit it if needed.</small>
 
-              <label htmlFor="photo-tag-select">Photo tag</label>
-              <select
-                id="photo-tag-select"
-                value={customTagMode ? '__custom__' : card.photoTag || ''}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (value === '__custom__') {
-                    setCustomTagMode(true);
-                    return;
-                  }
-                  setCustomTagMode(false);
-                  dispatch({ type: 'SET_PHOTO_TAG', tag: normalizePhotoTag(value) });
-                }}
-              >
-                <option value="">No Tag</option>
-                {PHOTO_TAG_PRESETS.map((preset) => (
-                  <option key={preset} value={preset}>
-                    {preset}
-                  </option>
-                ))}
-                <option value="__custom__">Custom…</option>
-              </select>
+              {template.photoTag && (
+                <>
+                  <label htmlFor="photo-tag-select">Category (yellow label)</label>
+                  <select
+                    id="photo-tag-select"
+                    value={customTagMode ? '__custom__' : card.photoTag || ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value === '__custom__') {
+                        setCustomTagMode(true);
+                        return;
+                      }
+                      setCustomTagMode(false);
+                      dispatch({ type: 'SET_PHOTO_TAG', tag: normalizePhotoTag(value) });
+                    }}
+                  >
+                    <option value="">No category</option>
+                    {PHOTO_TAG_PRESETS.map((preset) => (
+                      <option key={preset} value={preset}>
+                        {preset}
+                      </option>
+                    ))}
+                    <option value="__custom__">Custom…</option>
+                  </select>
 
-              {customTagMode && (
-                <div>
-                  <label htmlFor="photo-tag-custom">Custom label (max 40 characters)</label>
-                  <input
-                    id="photo-tag-custom"
-                    type="text"
-                    value={card.photoTag}
-                    maxLength={PHOTO_TAG_MAX_LENGTH}
-                    placeholder="নিজের ট্যাগ লিখুন"
-                    autoComplete="off"
-                    aria-describedby="photo-tag-count"
-                    onChange={(e) =>
-                      dispatch({ type: 'SET_PHOTO_TAG', tag: normalizePhotoTag(e.target.value) })
-                    }
-                  />
-                  <small id="photo-tag-count">
-                    {Array.from(card.photoTag).length}/{PHOTO_TAG_MAX_LENGTH} characters
-                  </small>
-                </div>
+                  {customTagMode && (
+                    <div>
+                      <label htmlFor="photo-tag-custom">Custom category (max {PHOTO_TAG_MAX_LENGTH} characters)</label>
+                      <input
+                        id="photo-tag-custom"
+                        type="text"
+                        value={card.photoTag}
+                        maxLength={PHOTO_TAG_MAX_LENGTH}
+                        placeholder="বিভাগ লিখুন"
+                        autoComplete="off"
+                        aria-describedby="photo-tag-count"
+                        onChange={(e) => dispatch({ type: 'SET_PHOTO_TAG', tag: normalizePhotoTag(e.target.value) })}
+                      />
+                      <small id="photo-tag-count">
+                        {Array.from(card.photoTag).length}/{PHOTO_TAG_MAX_LENGTH} characters
+                      </small>
+                    </div>
+                  )}
+                </>
               )}
             </fieldset>
           </section>
 
           <section aria-labelledby="design-heading">
             <fieldset>
-              <legend id="design-heading">3. Design</legend>
-              <span className="field-label" id="template-label">
-                Template
-              </span>
-              <div className="template-grid" role="radiogroup" aria-labelledby="template-label">
-                {templates.map((item) => (
-                  <label key={item.id} className={item.id === card.templateId ? 'template selected' : 'template'}>
-                    <input
-                      type="radio"
-                      name="template"
-                      value={item.id}
-                      checked={item.id === card.templateId}
-                      onChange={() => dispatch({ type: 'SWITCH_TEMPLATE', templateId: item.id })}
-                    />
-                    <img src={item.thumbnail} alt="" loading="lazy" />
-                    <span>{item.label}</span>
-                  </label>
-                ))}
-              </div>
+              <legend id="design-heading">3. Layout</legend>
 
-              <label htmlFor="local-image">Local image (JPG, PNG, WebP, GIF ≤ 8 MB)</label>
-              <input
-                id="local-image"
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                onChange={(e) => chooseLocalImage(e.target.files?.[0])}
-              />
-              <div className="input-action">
-                <button type="button" className="button secondary" onClick={restoreArticleImage}>
-                  Restore article image
-                </button>
-                <button
-                  type="button"
-                  className="button secondary"
-                  onClick={() => dispatch({ type: 'RESET_PHOTO' })}
-                >
-                  Reset photo position
-                </button>
-              </div>
-              <p className="field-note">
-                Image source: {card.image.kind === 'local' ? 'local file (this browser only)' : card.image.kind}.
-              </p>
+              {template.photo && (
+                <>
+                  {isArticle && (
+                    <>
+                      <label htmlFor="local-image">Replace photo (optional · JPG, PNG, WebP, GIF ≤ 8 MB)</label>
+                      <input
+                        id="local-image"
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        onChange={(e) => chooseLocalImage(e.target.files?.[0])}
+                      />
+                      <div className="input-action">
+                        <button type="button" className="button secondary" onClick={restoreArticleImage}>
+                          Restore article image
+                        </button>
+                      </div>
+                      <p className="field-note">
+                        Image source: {card.image.kind === 'local' ? 'local file (this browser only)' : card.image.kind}.
+                      </p>
+                    </>
+                  )}
+                  <label htmlFor="zoom-range">Photo zoom: {card.imageScale.toFixed(1)}× (1–3)</label>
+                  <input
+                    id="zoom-range"
+                    type="range"
+                    min={1}
+                    max={3}
+                    step={0.1}
+                    value={card.imageScale}
+                    onChange={(e) => dispatch({ type: 'SET_IMAGE_SCALE', scale: clampZoom(Number(e.target.value)) })}
+                  />
+                  <PositionControls
+                    layer="photo"
+                    x={card.photoPosition.x}
+                    y={card.photoPosition.y}
+                    onNudge={(dx, dy) => nudge('photo', dx, dy)}
+                    onReset={() => dispatch({ type: 'RESET_PHOTO' })}
+                    onKeyDown={onLayerKeyDown('photo')}
+                  />
+                </>
+              )}
 
-              <label htmlFor="font-size-range">
-                Headline size: {card.fontSize}px (30–120)
-              </label>
+              <label htmlFor="font-size-range">Headline size: {card.fontSize}px (30–120)</label>
               <input
                 id="font-size-range"
                 type="range"
@@ -587,38 +679,21 @@ export default function PhotocardEditor() {
                   onChange={(e) => dispatch({ type: 'SET_FONT_SIZE', size: clampFontSize(Number(e.target.value)) })}
                 />
                 <div className="size-presets" role="group" aria-label="Suggested headline sizes">
-                  {TITLE_SIZES.map((size) => (
-                    <button
-                      key={size}
-                      type="button"
-                      className="chip"
-                      onClick={() => dispatch({ type: 'SET_FONT_SIZE', size })}
-                    >
-                      {size}
-                    </button>
-                  ))}
+                  {[...new Set([...TITLE_SIZES, template.title.defaultFontSize])]
+                    .sort((x, y) => x - y)
+                    .map((size) => (
+                      <button
+                        key={size}
+                        type="button"
+                        className="chip"
+                        onClick={() => dispatch({ type: 'SET_FONT_SIZE', size })}
+                      >
+                        {size}
+                      </button>
+                    ))}
                 </div>
               </div>
 
-              <label htmlFor="zoom-range">Photo zoom: {card.imageScale.toFixed(1)}× (1–3)</label>
-              <input
-                id="zoom-range"
-                type="range"
-                min={1}
-                max={3}
-                step={0.1}
-                value={card.imageScale}
-                onChange={(e) => dispatch({ type: 'SET_IMAGE_SCALE', scale: clampZoom(Number(e.target.value)) })}
-              />
-
-              <PositionControls
-                layer="photo"
-                x={card.photoPosition.x}
-                y={card.photoPosition.y}
-                onNudge={(dx, dy) => nudge('photo', dx, dy)}
-                onReset={() => dispatch({ type: 'RESET_PHOTO' })}
-                onKeyDown={onLayerKeyDown('photo')}
-              />
               <PositionControls
                 layer="title"
                 x={card.titlePosition.x}
@@ -627,24 +702,30 @@ export default function PhotocardEditor() {
                 onReset={() => dispatch({ type: 'RESET_TITLE' })}
                 onKeyDown={onLayerKeyDown('title')}
               />
-              <PositionControls
-                layer="qr"
-                x={card.qrPosition.x}
-                y={card.qrPosition.y}
-                onNudge={(dx, dy) => nudge('qr', dx, dy)}
-                onReset={() => dispatch({ type: 'RESET_QR' })}
-                onKeyDown={onLayerKeyDown('qr')}
-              />
 
-              <div className="qr-toggle">
-                <input
-                  id="qr-visible"
-                  type="checkbox"
-                  checked={card.qrVisible}
-                  onChange={(e) => dispatch({ type: 'SET_QR_VISIBLE', visible: e.target.checked })}
-                />
-                <label htmlFor="qr-visible">Show QR code (links to the source URL)</label>
-              </div>
+              {template.qr && (
+                <>
+                  <PositionControls
+                    layer="qr"
+                    x={card.qrPosition.x}
+                    y={card.qrPosition.y}
+                    onNudge={(dx, dy) => nudge('qr', dx, dy)}
+                    onReset={() => dispatch({ type: 'RESET_QR' })}
+                    onKeyDown={onLayerKeyDown('qr')}
+                  />
+                  <div className="qr-toggle">
+                    <input
+                      id="qr-visible"
+                      type="checkbox"
+                      checked={card.qrVisible}
+                      onChange={(e) => dispatch({ type: 'SET_QR_VISIBLE', visible: e.target.checked })}
+                    />
+                    <label htmlFor="qr-visible">
+                      {isArticle ? 'Show QR code (links to the article this card was made from)' : 'Show QR code (links to starnews.com.bd)'}
+                    </label>
+                  </div>
+                </>
+              )}
               <button type="button" className="button secondary" onClick={() => dispatch({ type: 'RESET_LAYOUT' })}>
                 Reset layout to template defaults
               </button>
@@ -653,7 +734,7 @@ export default function PhotocardEditor() {
 
           <section aria-labelledby="export-heading">
             <fieldset>
-              <legend id="export-heading">4. Preview and Export</legend>
+              <legend id="export-heading">4. Export</legend>
               <div className="export-actions">
                 <button
                   type="button"
@@ -677,6 +758,7 @@ export default function PhotocardEditor() {
                   {exporting === 'copy' ? 'Copying…' : 'Copy PNG'}
                 </button>
               </div>
+              {needsUpload && <p className="field-note">Upload a photo for this card to enable export.</p>}
               {!clipboardSupported && (
                 <p className="field-note">Copy needs a secure browser with image-clipboard support. Download always works.</p>
               )}
@@ -689,75 +771,53 @@ export default function PhotocardEditor() {
         </div>
 
         <section className="preview-stage" aria-label="Photocard preview">
-          <div className="preview-frame" ref={previewFrameRef}>
+          <div className="preview-frame" ref={previewFrameRef} style={box.frame}>
             <div
               className={`card ${card.language === 'bn' ? 'bangla' : 'english'}`}
               lang={card.language}
-              style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}
+              style={box.card}
             >
-              <DraggableLayer
-                label="Photo layer"
-                position={{ x: 0, y: 0 }}
-                scale={scale}
-                onMove={(dx, dy) => {
-                  const next = clampPhotoOffset(
-                    photoSize,
-                    template.photo,
-                    card.imageScale,
-                    { x: card.photoPosition.x + dx, y: card.photoPosition.y + dy },
-                  );
-                  dispatch({ type: 'SET_PHOTO_POSITION', position: next });
-                }}
-                onKeyDown={onLayerKeyDown('photo')}
-              >
-                <div
-                  className="photo-window"
-                  style={{
-                    left: template.photo.x,
-                    top: template.photo.y,
-                    width: template.photo.width,
-                    height: template.photo.height,
-                  }}
+              {template.photo && (
+                <DraggableLayer
+                  label="Photo layer"
+                  position={{ x: 0, y: 0 }}
+                  scale={scale}
+                  onMove={(dx, dy) => nudge('photo', dx, dy)}
+                  onKeyDown={onLayerKeyDown('photo')}
                 >
-                  <img
-                    className="photo"
-                    src={card.image.src}
-                    alt=""
-                    draggable={false}
-                    onLoad={(e) => {
-                      const { naturalWidth, naturalHeight } = e.currentTarget;
-                      if (naturalWidth > 0 && naturalHeight > 0) {
-                        setPhotoSize({ width: naturalWidth, height: naturalHeight });
-                      }
-                    }}
+                  <div
+                    className="photo-window"
                     style={{
-                      transform: `translate(${card.photoPosition.x}px, ${card.photoPosition.y}px) scale(${card.imageScale})`,
+                      left: template.photo.x,
+                      top: template.photo.y,
+                      width: template.photo.width,
+                      height: template.photo.height,
                     }}
-                  />
-                </div>
-              </DraggableLayer>
+                  >
+                    <img
+                      className="photo"
+                      src={card.image.src}
+                      alt=""
+                      draggable={false}
+                      onLoad={(e) => {
+                        const { naturalWidth, naturalHeight } = e.currentTarget;
+                        if (naturalWidth > 0 && naturalHeight > 0) {
+                          setPhotoSize({ width: naturalWidth, height: naturalHeight });
+                        }
+                      }}
+                      style={{
+                        transform: `translate(${card.photoPosition.x}px, ${card.photoPosition.y}px) scale(${card.imageScale})`,
+                      }}
+                    />
+                  </div>
+                </DraggableLayer>
+              )}
               <img className="card-template" src={template.src} alt="" draggable={false} />
-              <div
-                className="card-date"
-                style={{
-                  left: template.date.x,
-                  top: template.date.y,
-                  width: template.date.width,
-                  fontSize: template.date.fontSize,
-                }}
-              >
-                {card.publicationDate || 'তারিখ'}
+              <div className="card-date" style={dateStyle(template) as React.CSSProperties}>
+                {card.publicationDate}
               </div>
-              {card.photoTag && (
-                <div
-                  className="photo-tag"
-                  style={{
-                    left: template.photoTag.x,
-                    top: template.photoTag.y,
-                    maxWidth: template.photoTag.maxWidth,
-                    fontSize: template.photoTag.fontSize,
-                  }}
-                >
+              {pill && card.photoTag && (
+                <div className="card-pill" style={pill as React.CSSProperties}>
                   {card.photoTag}
                 </div>
               )}
@@ -765,74 +825,47 @@ export default function PhotocardEditor() {
                 label="Headline layer"
                 position={card.titlePosition}
                 scale={scale}
-                onMove={(dx, dy) => {
-                  const next = clampToCanvas(
-                    { x: card.titlePosition.x + dx, y: card.titlePosition.y + dy },
-                    { width: template.title.width, height: titleHeight() },
-                  );
-                  dispatch({ type: 'SET_TITLE_POSITION', position: next });
-                }}
+                onMove={(dx, dy) => nudge('title', dx, dy)}
                 onKeyDown={onLayerKeyDown('title')}
               >
-                <div
-                  className="card-title"
-                  ref={titleRef}
-                  style={{
-                    left: card.titlePosition.x,
-                    top: card.titlePosition.y,
-                    width: template.title.width,
-                    fontSize: card.fontSize,
-                  }}
-                >
+                <div className="card-title" ref={titleRef} style={titleStyle(template, card) as React.CSSProperties}>
                   {card.title ? (
                     titleLines.map((line, i) => (
                       <div key={i}>
                         {line.map((token, j) => (
-                          <span key={j} className={token.highlighted ? 'highlight' : undefined}>
+                          <span key={j} style={token.highlighted ? { color: emphasis } : undefined}>
                             {token.text}
                           </span>
                         ))}
                       </div>
                     ))
                   ) : (
-                    <span className="placeholder">Headline preview</span>
+                    <span className="placeholder">শিরোনাম এখানে</span>
                   )}
                 </div>
               </DraggableLayer>
-              {card.qrVisible && qrDataUrl && (
+              {qr && card.qrVisible && qrDataUrl && (
                 <DraggableLayer
                   label="QR code layer"
                   position={card.qrPosition}
                   scale={scale}
-                  onMove={(dx, dy) => {
-                    const next = clampToCanvas(
-                      { x: card.qrPosition.x + dx, y: card.qrPosition.y + dy },
-                      { width: template.qr.width, height: template.qr.height },
-                    );
-                    dispatch({ type: 'SET_QR_POSITION', position: next });
-                  }}
+                  onMove={(dx, dy) => nudge('qr', dx, dy)}
                   onKeyDown={onLayerKeyDown('qr')}
                 >
-                  <div
-                    className="qr"
-                    style={{
-                      left: card.qrPosition.x,
-                      top: card.qrPosition.y,
-                      width: template.qr.width,
-                      height: template.qr.height,
-                      padding: template.qr.inset,
-                    }}
-                  >
-                    <img src={qrDataUrl} alt="QR code linking to the source article" draggable={false} />
+                  <div className="qr" style={qr as React.CSSProperties}>
+                    <img
+                      src={qrDataUrl}
+                      alt={isArticle ? 'QR code linking to the source article' : 'QR code linking to starnews.com.bd'}
+                      draggable={false}
+                    />
                   </div>
                 </DraggableLayer>
               )}
             </div>
           </div>
-          <p className="dimensions">1080 × 1080 PNG · preview scale {scale.toFixed(2)}×</p>
-          {card.loadStatus === 'idle' && (
-            <p className="dimensions">Tip: paste a Star News URL above, or type a headline to preview the layout.</p>
-          )}
+          <p className="dimensions">
+            {canvasW} × {canvasH} PNG · preview scale {scale.toFixed(2)}×
+          </p>
         </section>
       </div>
     </div>

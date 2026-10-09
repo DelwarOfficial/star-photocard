@@ -73,3 +73,26 @@ Implementation in progress on 2026-09-05. The legacy WordPress plugin was delete
 - Skill-guided polish pass (Operate mode): header status summary (`Template · State`), secondary-button hover, `::selection`/caret theming, tabular numerals on position readouts, status restyled off the side-tab pattern, Inter dropped from the font stack, mobile header simplified.
 - Detector findings adjudicated: status side-tab fixed, Inter removed; photo-tag red bar kept as intentional card-artwork language.
 - Verified by Chromium screenshots (desktop 1600 + mobile 390): Bengali shaping, highlight, template switching, sticky preview, responsive stacking.
+
+## Portrait reference cards + two-mode creation flow (2026-10-09)
+
+Canvas is now **1080 × 1350** (4:5), matching the 1600 × 2000 artwork. Registry values are written in artwork pixels and scaled once (`ARTWORK_SCALE = 1080 / 1600`) in `src/config/templates.ts`. Sources: transparency/pill/icon measurements of the blank PNGs plus headline/QR/date measurements of the owner's six reference cards.
+
+| id | mode | photo window (1080 space) | title box top / width / size | pill | QR | meta rows |
+|---|---|---|---|---|---|---|
+| `common-card` | article | 0–651 (artwork 0–964) | 782 / 810 / 66 | yellow, 1028–1100 artwork | yes | 3 |
+| `common-card-bottom` | article | 488–1140 (artwork 723–1689) | 183 / 810 / 66 | yellow, 141–213 artwork | yes | 3 |
+| `special-card-top` | article | full bleed | 84 / 945 / 68, shadow | — | yes | 3 |
+| `special-card-bottom` | article | full bleed | 954 / 945 / 68, shadow | — | yes | 3 |
+| `just-in` | custom (upload + text) | 0–847 (artwork 0–1255) | 927 / 945 / 68 | baked "সদ্য প্রাপ্ত" | yes (root domain) | 2 |
+| `breaking-news` | custom (text only) | **none** | 265 / 864 / 92, black | — | yes | 2 |
+
+Flow decisions:
+- **Modes.** Article cards keep URL → `/api/article` → editable fields. Custom cards hide the URL input and never call the API. `just-in` requires an uploaded photo before export (`requiresImage`); `breaking-news` has no photo layer at all.
+- **Date = today, always.** Every card, in both modes, shows today's Dhaka date in Bengali with a two-digit day (`todayBanglaDate()`, e.g. "০৯ অক্টোবর ২০২৬"), set on creation and on reset. Fetching an article does **not** replace it with the article's publish date. The field stays editable; a "Today" button restores it. Reset keeps the chosen card type.
+- **Meta stack.** URL, calendar icon and "বিস্তারিত কমেন্টে" are baked into every artwork; only the date text is rendered, left-aligned beside the calendar icon (`dateAlign: 'left'`). Date is black on the yellow breaking card.
+- **QR.** Article cards encode the reference news link the card was made from (the fetched article's canonical URL). Custom cards (`just-in`, `breaking-news`) have no reference URL, so they encode the root domain `https://starnews.com.bd`. All six cards show the QR in the standard spot (white rounded box, bottom-right, left of the meta stack); `just-in`'s is centred on its 2-row stack. The `special-card-bottom` reference had no QR; it is shown by default and can be toggled off. E2E verifies the encoded content by sampling the rendered QR's module grid.
+- **Pill / category.** `photoTag` now renders category text (presets: রাজনীতি, জাতীয়, …) centred in the baked empty yellow pill on the two common cards. **just-in caveat:** its pill text "সদ্য প্রাপ্ত" is baked into the artwork, so a user tag would overlay it; `photoTag` is therefore `null` there and no tag input is shown.
+- **Title styling.** `titleColor`, `titleShadow`, `highlightColor` per template. Highlight = `#FFF200`, measured from the references (the pill yellow `#FFD700` is baked). Breaking and just-in have `highlightColor: null`, so `*marked*` words stay in the title colour.
+- **One style source.** Text/QR layer styles live in `src/lib/card/layerStyles.ts` and are used by both the React preview and the html2canvas exporter, so they cannot drift.
+- **Known gap — typeface.** The references set headlines in a lighter, narrower Bengali face than the bundled StarNews fonts. Positions match; line breaks can differ (e.g. breaking demo headline wraps to 4 lines instead of 3). Needs the reference font file to close.
