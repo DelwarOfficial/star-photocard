@@ -1,5 +1,5 @@
 import { getTemplate } from '../../config/templates';
-import { normalizePhotoTag } from './photoTag';
+import { limitTagInput, normalizePhotoTag } from './photoTag';
 import { createCardState, layoutDefaults, type CardState } from './types';
 
 export type CardAction =
@@ -19,6 +19,7 @@ export type CardAction =
   | Readonly<{ type: 'SET_TITLE'; title: string }>
   | Readonly<{ type: 'SET_DATE'; date: string }>
   | Readonly<{ type: 'SET_PHOTO_TAG'; tag: string }>
+  | Readonly<{ type: 'SET_PHOTO_CREDIT'; credit: string }>
   | Readonly<{ type: 'SET_FONT_SIZE'; size: number }>
   | Readonly<{ type: 'SET_IMAGE_SCALE'; scale: number }>
   | Readonly<{ type: 'SET_PHOTO_POSITION'; position: CardState['photoPosition'] }>
@@ -78,8 +79,10 @@ export function cardReducer(state: CardState, action: CardAction): CardState {
       return { ...state, title: action.title, isDirty: true };
     case 'SET_DATE':
       return { ...state, publicationDate: action.date, isDirty: true };
+    case 'SET_PHOTO_CREDIT':
+      return { ...state, photoCredit: limitTagInput(action.credit), isDirty: true };
     case 'SET_PHOTO_TAG':
-      return { ...state, photoTag: action.tag, isDirty: true };
+      return { ...state, photoTag: limitTagInput(action.tag), isDirty: true };
     case 'SET_FONT_SIZE':
       return { ...state, fontSize: clampFontSize(action.size), isDirty: true };
     case 'SET_IMAGE_SCALE':

@@ -2,7 +2,8 @@ import html2canvas from 'html2canvas';
 import { getTemplate } from '../../config/templates';
 import { coverGeometry } from './geometry';
 import { tokenizeTitle } from './highlightTitle';
-import { applyStyle, dateStyle, highlightColor, pillStyle, qrStyle, titleStyle } from './layerStyles';
+import { hasTag } from './photoTag';
+import { applyStyle, creditStyle, dateStyle, highlightColor, pillStyle, qrStyle, titleStyle } from './layerStyles';
 import { decodeImage, waitForFonts, type CardRenderer, type ExportSnapshot } from './renderer';
 
 /**
@@ -95,8 +96,16 @@ export class Html2CanvasRenderer implements CardRenderer {
       applyStyle(date, dateStyle(template));
       card.appendChild(date);
 
+      const credit = creditStyle(template);
+      if (credit && hasTag(snapshot.state.photoCredit)) {
+        const creditEl = document.createElement('div');
+        creditEl.textContent = snapshot.state.photoCredit;
+        applyStyle(creditEl, credit);
+        card.appendChild(creditEl);
+      }
+
       const pill = pillStyle(template);
-      if (pill && snapshot.state.photoTag) {
+      if (pill && hasTag(snapshot.state.photoTag)) {
         const tag = document.createElement('div');
         tag.textContent = snapshot.state.photoTag;
         applyStyle(tag, pill);

@@ -270,6 +270,31 @@ describe('reducer', () => {
     const edited = cardReducer(cardReducer(initialCardState, success), { type: 'SET_PHOTO_TAG', tag: 'জাতীয়' });
     expect(edited.photoTag).toBe('জাতীয়');
   });
+  it('sets photo credits: presets, 40 code points, spaces kept while typing, cleared by reset', () => {
+    let st = cardReducer(initialCardState, { type: 'SET_PHOTO_CREDIT', credit: 'এআই ছবি' });
+    expect(st.photoCredit).toBe('এআই ছবি');
+    // Typing "ছবি " must keep the trailing space so the next word can follow.
+    st = cardReducer(st, { type: 'SET_PHOTO_CREDIT', credit: 'ছবি ' });
+    expect(st.photoCredit).toBe('ছবি ');
+    const long = 'ক'.repeat(45);
+    expect(Array.from(cardReducer(st, { type: 'SET_PHOTO_CREDIT', credit: long }).photoCredit)).toHaveLength(40);
+    // Category pill gets the same live-typing behaviour.
+    expect(cardReducer(st, { type: 'SET_PHOTO_TAG', tag: 'রংপুর ' }).photoTag).toBe('রংপুর ');
+    expect(cardReducer(st, { type: 'FULL_RESET' }).photoCredit).toBe('');
+  });
+  it('places every credit tag inside its template photo window', () => {
+    for (const t of templates) {
+      if (!t.photo) {
+        expect(t.photoCredit, t.id).toBeNull();
+        continue;
+      }
+      const c = t.photoCredit!;
+      const height = Math.round(c.fontSize * 1.2 + c.fontSize * 0.6); // line + vertical padding
+      expect(c.x, t.id).toBeGreaterThanOrEqual(t.photo.x);
+      expect(c.y, t.id).toBeGreaterThanOrEqual(t.photo.y);
+      expect(c.y + height, t.id).toBeLessThanOrEqual(t.photo.y + t.photo.height);
+    }
+  });
   it('steps zoom without float drift and clamps it', () => {
     let z = 1;
     for (let i = 0; i < 5; i += 1) z = clampZoom(z + 0.1);

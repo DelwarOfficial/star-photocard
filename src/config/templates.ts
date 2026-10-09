@@ -33,6 +33,11 @@ export type TemplateDefinition = Readonly<{
   dateColor: string;
   /** Category label drawn inside the baked (empty) yellow pill; null when there is no editable pill. */
   photoTag: Rect & Readonly<{ fontSize: number }> | null;
+  /**
+   * Photo-credit tag (সংগৃহীত, এআই ছবি, …): top-left of the tag box inside the photo,
+   * placed in a corner clear of the headline, pill and footer. null when there is no photo.
+   */
+  photoCredit: Readonly<Point & { fontSize: number }> | null;
   title: Readonly<Point & { width: number; defaultFontSize: number; maxFontSize: number }>;
   titleColor: string;
   titleShadow: boolean;
@@ -77,11 +82,15 @@ const title = (x: number, y: number, width: number, fontSize: number) => ({
 });
 const qrAt = (x: number, y: number) => ({ ...rect(x, y, 131, 131), inset: a(10) });
 const pillAt = (y: number) => ({ ...rect(681, y, 236, 73), fontSize: a(44) });
+/** Credit tag box is ≈ 50 artwork px tall (28px text + padding); keep 24px off the photo edge. */
+const CREDIT_HEIGHT = 50;
+const creditAt = (x: number, y: number) => ({ x: a(x), y: a(y), fontSize: a(28) });
+const creditAbove = (photoBottom: number) => creditAt(32, photoBottom - 24 - CREDIT_HEIGHT);
 
 export const templates: readonly TemplateDefinition[] = [
   {
     id: 'common-card',
-    label: 'ছবি ওপরে',
+    label: 'Photo on top',
     src: '/templates/common-card.png',
     thumbnail: '/templates/common-card.png',
     language: 'bn',
@@ -93,6 +102,8 @@ export const templates: readonly TemplateDefinition[] = [
     dateAlign: 'left',
     dateColor: WHITE,
     photoTag: pillAt(1028),
+    // Bottom-left of the photo (0–964).
+    photoCredit: creditAbove(964),
     title: title(200, 1158, 1200, 98),
     titleColor: WHITE,
     titleShadow: false,
@@ -102,7 +113,7 @@ export const templates: readonly TemplateDefinition[] = [
   },
   {
     id: 'common-card-bottom',
-    label: 'ছবি নিচে',
+    label: 'Photo at bottom',
     src: '/templates/common-card-bottom.png',
     thumbnail: '/templates/common-card-bottom.png',
     language: 'bn',
@@ -114,6 +125,8 @@ export const templates: readonly TemplateDefinition[] = [
     dateAlign: 'left',
     dateColor: WHITE,
     photoTag: pillAt(141),
+    // Bottom-left of the photo (723–1689).
+    photoCredit: creditAbove(1689),
     title: title(200, 271, 1200, 98),
     titleColor: WHITE,
     titleShadow: false,
@@ -123,7 +136,7 @@ export const templates: readonly TemplateDefinition[] = [
   },
   {
     id: 'special-card-top',
-    label: 'পূর্ণ ছবি, শিরোনাম ওপরে',
+    label: 'Full photo, headline on top',
     src: '/templates/Special-card-top.png',
     thumbnail: '/templates/Special-card-top.png',
     language: 'bn',
@@ -135,6 +148,8 @@ export const templates: readonly TemplateDefinition[] = [
     dateAlign: 'left',
     dateColor: WHITE,
     photoTag: null,
+    // Headline is at the top; credit sits bottom-left, above the logo/meta footer.
+    photoCredit: creditAt(32, 1690),
     title: title(100, 124, 1400, 101),
     titleColor: WHITE,
     titleShadow: true,
@@ -144,7 +159,7 @@ export const templates: readonly TemplateDefinition[] = [
   },
   {
     id: 'special-card-bottom',
-    label: 'পূর্ণ ছবি, শিরোনাম নিচে',
+    label: 'Full photo, headline at bottom',
     src: '/templates/Special-card-bottom.png',
     thumbnail: '/templates/Special-card-bottom.png',
     language: 'bn',
@@ -156,6 +171,8 @@ export const templates: readonly TemplateDefinition[] = [
     dateAlign: 'left',
     dateColor: WHITE,
     photoTag: null,
+    // Headline and footer fill the bottom; credit goes top-left.
+    photoCredit: creditAt(32, 32),
     title: title(100, 1413, 1400, 101),
     titleColor: WHITE,
     titleShadow: true,
@@ -165,7 +182,7 @@ export const templates: readonly TemplateDefinition[] = [
   },
   {
     id: 'just-in',
-    label: 'সদ্য প্রাপ্ত',
+    label: 'Just In',
     src: '/templates/just-in.png',
     thumbnail: '/templates/just-in.png',
     language: 'bn',
@@ -178,6 +195,8 @@ export const templates: readonly TemplateDefinition[] = [
     dateColor: WHITE,
     // The pill text "সদ্য প্রাপ্ত" is baked into the artwork; a user tag would overlay it.
     photoTag: null,
+    // Bottom-left of the photo (0–1255), clear of the centred "সদ্য প্রাপ্ত" pill.
+    photoCredit: creditAbove(1255),
     title: title(100, 1374, 1400, 101),
     titleColor: WHITE,
     titleShadow: false,
@@ -188,7 +207,7 @@ export const templates: readonly TemplateDefinition[] = [
   },
   {
     id: 'breaking-news',
-    label: 'ব্রেকিং নিউজ',
+    label: 'Breaking News',
     src: '/templates/Breaking_NEWS.png',
     thumbnail: '/templates/Breaking_NEWS.png',
     language: 'bn',
@@ -200,6 +219,7 @@ export const templates: readonly TemplateDefinition[] = [
     dateAlign: 'left',
     dateColor: BLACK,
     photoTag: null,
+    photoCredit: null,
     title: title(160, 393, 1280, 137),
     titleColor: BLACK,
     titleShadow: false,

@@ -1,8 +1,9 @@
 ---
 import PhotocardEditor from '../components/editor/PhotocardEditor';
 import AppLayout from '../layouts/AppLayout.astro';
+import { S } from '../lib/i18n/strings';
 ---
-<AppLayout title="স্টার নিউজ ফটোকার্ড জেনারেটর" description="স্টার নিউজের সংবাদ থেকে নিউজরুমের ফটোকার্ড তৈরি করুন।">
+<AppLayout title={S.page.title} description={S.page.description}>
   <main>
     <PhotocardEditor client:load />
   </main>

@@ -13,6 +13,8 @@ export type CardState = Readonly<{
   templateId: string;
   image: Readonly<{ kind: ImageKind; src: string }>;
   photoTag: string;
+  /** Photo-credit tag text; empty = no tag. */
+  photoCredit: string;
   fontSize: number;
   imageScale: number;
   photoPosition: Point;
@@ -23,7 +25,8 @@ export type CardState = Readonly<{
   isDirty: boolean;
 }>;
 
-export const FALLBACK_IMAGE_SRC = '/photos/default-news.jpg';
+/** Demo photo used until an article photo or upload replaces it (the article photo always wins). */
+export const FALLBACK_IMAGE_SRC = '/photos/Star-news-file-image.webp';
 
 /** Per-template layer defaults (title box, font size, QR spot). */
 export function layoutDefaults(template: TemplateDefinition): Pick<CardState, 'fontSize' | 'titlePosition' | 'qrPosition'> {
@@ -48,6 +51,7 @@ const baseCardState: CardState = {
   templateId: defaultTemplate.id,
   image: { kind: 'fallback', src: FALLBACK_IMAGE_SRC },
   photoTag: '',
+  photoCredit: '',
   imageScale: 1,
   photoPosition: { x: 0, y: 0 },
   ...layoutDefaults(defaultTemplate),

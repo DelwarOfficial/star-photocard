@@ -49,6 +49,25 @@ export function pillStyle(template: TemplateDefinition): LayerStyle | null {
   };
 }
 
+/** Photo-credit tag: small dark label in a photo corner. */
+export function creditStyle(template: TemplateDefinition): LayerStyle | null {
+  const credit = template.photoCredit;
+  if (!credit) return null;
+  return {
+    position: 'absolute',
+    left: credit.x,
+    top: credit.y,
+    padding: `${Math.round(credit.fontSize * 0.3)}px ${Math.round(credit.fontSize * 0.5)}px`,
+    fontSize: credit.fontSize,
+    fontWeight: 700,
+    lineHeight: 1.2,
+    color: '#ffffff',
+    background: 'rgba(0,0,0,.62)',
+    borderRadius: 4,
+    whiteSpace: 'nowrap',
+  };
+}
+
 export function titleStyle(template: TemplateDefinition, state: CardState): LayerStyle {
   return {
     position: 'absolute',

@@ -8,7 +8,7 @@ const ARTICLE_URL = 'https://www.starnews.com.bd/bangla-news';
 const CARD_W = 1080;
 const CARD_H = 1350;
 const DIMENSIONS = `${CARD_W} × ${CARD_H} PNG`;
-const UPLOAD_PHOTO = fileURLToPath(new URL('../../public/photos/default-news.jpg', import.meta.url));
+const UPLOAD_PHOTO = fileURLToPath(new URL('../../public/photos/Star-news-file-image.webp', import.meta.url));
 
 async function mockArticle(
   page: Page,
@@ -41,9 +41,9 @@ async function open(page: Page): Promise<void> {
 
 async function generate(page: Page): Promise<void> {
   await open(page);
-  await page.getByLabel('স্টার নিউজের সংবাদের লিংক').fill(ARTICLE_URL);
-  await page.getByRole('button', { name: 'তৈরি করুন', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('কার্ড তৈরি হয়েছে');
+  await page.getByLabel('Star News article link').fill(ARTICLE_URL);
+  await page.getByRole('button', { name: 'Generate', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Card ready');
 }
 
 /**
@@ -82,7 +82,7 @@ async function expectQrEncodes(page: Page, target: string): Promise<void> {
 async function exportPixels(page: Page, points: Array<{ x: number; y: number }>): Promise<number[][]> {
   const [download] = await Promise.all([
     page.waitForEvent('download'),
-    page.getByRole('button', { name: 'PNG ডাউনলোড' }).click(),
+    page.getByRole('button', { name: 'Download PNG' }).click(),
   ]);
   const b64 = (await readFile((await download.path())!)).toString('base64');
   return page.evaluate(
@@ -122,7 +122,7 @@ async function pickTemplate(page: Page, name: RegExp): Promise<void> {
 async function downloadPng(page: Page): Promise<{ width: number; height: number; name: string }> {
   const [download] = await Promise.all([
     page.waitForEvent('download'),
-    page.getByRole('button', { name: 'PNG ডাউনলোড' }).click(),
+    page.getByRole('button', { name: 'Download PNG' }).click(),
   ]);
   const png = await readFile((await download.path())!);
   // PNG signature, then IHDR width/height as big-endian uint32 at bytes 16-23.
@@ -134,27 +134,27 @@ async function downloadPng(page: Page): Promise<{ width: number; height: number;
 test.describe('photocard generator', () => {
   test('empty state disables export, auto-dates the card and validates URLs', async ({ page }) => {
     await open(page);
-    await expect(page.getByRole('heading', { name: 'ফটোকার্ড জেনারেটর' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'PNG ডাউনলোড' })).toBeDisabled();
-    await expect(page.getByRole('button', { name: 'PNG কপি' })).toBeDisabled();
+    await expect(page.getByRole('heading', { name: 'Photocard Generator' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Download PNG' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Copy PNG' })).toBeDisabled();
     // Auto-date: today in Bengali, already on the card and in the editable field.
-    await expect(page.getByLabel('তারিখ', { exact: true })).toHaveValue(todayBanglaDate());
+    await expect(page.getByLabel('Date', { exact: true })).toHaveValue(todayBanglaDate());
     await expect(page.locator('.card-date')).toHaveText(todayBanglaDate());
-    await page.getByLabel('স্টার নিউজের সংবাদের লিংক').fill('https://evil.test/article');
-    await page.getByRole('button', { name: 'তৈরি করুন', exact: true }).click();
-    await expect(page.getByRole('status')).toContainText('শুধু স্টার নিউজের লিংক');
+    await page.getByLabel('Star News article link').fill('https://evil.test/article');
+    await page.getByRole('button', { name: 'Generate', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Only Star News links');
   });
 
   test('article mode: fetched values populate the card and stay editable', async ({ page }) => {
     await mockArticle(page, {});
     await generate(page);
-    await expect(page.getByRole('button', { name: 'PNG ডাউনলোড' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Download PNG' })).toBeEnabled();
     // The card date stays today's date — the article's own date is not used.
     await expect(page.locator('.card-date')).toHaveText(todayBanglaDate());
     await expectQrEncodes(page, ARTICLE_URL);
-    await page.getByLabel('শিরোনাম', { exact: true }).fill('সম্পাদিত শিরোনাম');
+    await page.getByLabel('Headline', { exact: true }).fill('সম্পাদিত শিরোনাম');
     await expect(page.locator('.card-title')).toHaveText('সম্পাদিত শিরোনাম');
-    await page.getByLabel('বিভাগ (হলুদ লেবেল)').fill('রাজনীতি');
+    await page.getByLabel('Category (yellow label)').fill('রাজনীতি');
     await expect(page.locator('.card-pill')).toHaveText('রাজনীতি');
   });
 
@@ -164,8 +164,8 @@ test.describe('photocard generator', () => {
     await generate(page);
     await expect(page.locator('.card-pill')).toHaveText('রংপুর');
     // Pre-filled, and still an ordinary editable text field.
-    await expect(page.getByLabel('বিভাগ (হলুদ লেবেল)')).toHaveValue('রংপুর');
-    await page.getByLabel('বিভাগ (হলুদ লেবেল)').fill('রংপুর বিভাগ');
+    await expect(page.getByLabel('Category (yellow label)')).toHaveValue('রংপুর');
+    await page.getByLabel('Category (yellow label)').fill('রংপুর বিভাগ');
     await expect(page.locator('.card-pill')).toHaveText('রংপুর বিভাগ');
     await expectQrEncodes(page, canonical);
   });
@@ -175,31 +175,31 @@ test.describe('photocard generator', () => {
     await generate(page);
 
     // Text fields stay editable after generate and update the card live.
-    await page.getByLabel('শিরোনাম', { exact: true }).fill('নতুন *শিরোনাম*');
+    await page.getByLabel('Headline', { exact: true }).fill('নতুন *শিরোনাম*');
     await expect(page.locator('.card-title')).toHaveText('নতুন শিরোনাম');
-    await page.getByLabel('তারিখ', { exact: true }).fill('১২ অক্টোবর ২০২৬');
+    await page.getByLabel('Date', { exact: true }).fill('১২ অক্টোবর ২০২৬');
     await expect(page.locator('.card-date')).toHaveText('১২ অক্টোবর ২০২৬');
-    await page.getByLabel('বিভাগ (হলুদ লেবেল)').fill('খেলা');
+    await page.getByLabel('Category (yellow label)').fill('খেলা');
     await expect(page.locator('.card-pill')).toHaveText('খেলা');
 
     // Zoom +/- composes with panning, and zooming back out re-clamps the pan.
-    const zoomIn = page.getByRole('button', { name: 'ছবি বড় করুন' });
-    const zoomOut = page.getByRole('button', { name: 'ছবি ছোট করুন' });
+    const zoomIn = page.getByRole('button', { name: 'Zoom photo in' });
+    const zoomOut = page.getByRole('button', { name: 'Zoom photo out' });
     await expect(zoomOut).toBeDisabled();
     for (let i = 0; i < 5; i += 1) await zoomIn.click();
-    await expect(page.getByLabel(/^ছবির জুম/)).toHaveValue('1.5');
-    const photoPos = page.getByText(/^ছবির অবস্থান:/);
-    for (let i = 0; i < 3; i += 1) await page.getByRole('button', { name: 'ছবি ওপরে সরান' }).click({ modifiers: [] });
+    await expect(page.getByLabel(/^Photo zoom/)).toHaveValue('1.5');
+    const photoPos = page.getByText(/^Photo position:/);
+    for (let i = 0; i < 3; i += 1) await page.getByRole('button', { name: 'Move photo up' }).click({ modifiers: [] });
     await page.locator('.drag-layer').first().focus();
     await page.keyboard.press('Shift+ArrowUp');
-    await expect(photoPos).not.toHaveText('ছবির অবস্থান: 0, 0 px');
+    await expect(photoPos).not.toHaveText('Photo position: 0, 0 px');
     for (let i = 0; i < 5; i += 1) await zoomOut.click();
-    await expect(page.getByLabel(/^ছবির জুম/)).toHaveValue('1');
+    await expect(page.getByLabel(/^Photo zoom/)).toHaveValue('1');
     // Back at zoom 1 the pan is re-clamped into the (smaller) overflow — never left out of bounds.
-    await expect(photoPos).toHaveText(/^ছবির অবস্থান: 0, -?\d+ px$/);
+    await expect(photoPos).toHaveText(/^Photo position: 0, -?\d+ px$/);
 
     // Custom upload overrides the article photo in preview and export.
-    await page.getByLabel(/^ছবি বদলান/).setInputFiles(await solidPng(page, '#00c853'));
+    await page.getByLabel(/^Use your own photo/).setInputFiles(await solidPng(page, '#00c853'));
     await expect(page.locator('.photo')).toHaveAttribute('src', /^blob:/);
     const photoCentre = { x: 540, y: 300 };
     const qrCentre = { x: 765, y: 1265 }; // inside the common-card QR box
@@ -209,13 +209,103 @@ test.describe('photocard generator', () => {
     expect(Math.min(...qrOn!)).toBeLessThan(80); // QR modules or white box are there…
 
     // QR off: gone from the preview and from the exported PNG.
-    await page.getByLabel(/^QR কোড দেখান/).uncheck();
+    await page.getByLabel(/^Show QR code/).uncheck();
     await expect(page.locator('.qr')).toHaveCount(0);
     const [, qrOff] = await exportPixels(page, [photoCentre, qrCentre]);
     expect(Math.max(...qrOff!)).toBeLessThan(80); // dark footer, no white QR box
     // …and back on.
-    await page.getByLabel(/^QR কোড দেখান/).check();
+    await page.getByLabel(/^Show QR code/).check();
     await expect(page.locator('.qr')).toHaveCount(1);
+  });
+
+  test('photo credit presets, custom text and reset (preview + export)', async ({ page }) => {
+    await mockArticle(page, {});
+    await generate(page);
+    const select = page.getByLabel('Photo tag', { exact: true });
+    const tag = page.locator('.card-credit');
+    await expect(tag).toBeHidden();
+    for (const preset of ['সংগৃহীত', 'এআই ছবি', 'ফাইল ছবি', 'প্রতীকী ছবি', 'সৌজন্য ছবি', 'ছবি: স্টার নিউজ', 'স্টার নিউজ গ্রাফিক্স']) {
+      await select.selectOption(preset);
+      await expect(tag).toBeVisible();
+      await expect(tag).toHaveText(preset);
+    }
+    await select.selectOption('');
+    await expect(tag).toBeHidden();
+    await expect(tag).toHaveAttribute('aria-hidden', 'true');
+
+    // Custom: field appears, live updates on each keystroke (spaces survive), 40-character cap.
+    await select.selectOption('__custom__');
+    const custom = page.getByLabel('Your tag', { exact: true });
+    await expect(custom).toBeVisible();
+    await expect(tag).toBeHidden(); // empty custom = no tag
+    await custom.pressSequentially('ছবি সংগৃহীত');
+    await expect(tag).toHaveText('ছবি সংগৃহীত');
+    await expect(tag).not.toHaveAttribute('aria-hidden', 'true');
+    await custom.fill('ক'.repeat(45));
+    await expect(custom).toHaveValue('ক'.repeat(40));
+    await custom.fill('   ');
+    await expect(tag).toBeHidden();
+    await custom.fill('ছবি: সংগৃহীত');
+
+    // Exported PNG carries the dark credit box at the registry position (common-card: bottom-left of photo).
+    await page.getByLabel(/^Use your own photo/).setInputFiles(await solidPng(page, '#00c853'));
+    const inTag = { x: 30, y: 612 };
+    const [withTag] = await exportPixels(page, [inTag]);
+    expect(withTag![1]).toBeLessThan(100); // dark tag over the green photo
+
+    // Reset clears the selection, the custom field and the tag.
+    page.once('dialog', (dialog) => void dialog.accept());
+    await page.getByRole('button', { name: 'Reset', exact: true }).click();
+    await expect(select).toHaveValue('');
+    await expect(page.getByLabel('Your tag', { exact: true })).toHaveCount(0);
+    await expect(tag).toBeHidden();
+  });
+
+  test('article without an image falls back to the demo photo in preview and export', async ({ page }) => {
+    await mockArticle(page, {}); // no imageUrl
+    await generate(page);
+    await expect(page.getByRole('status')).toContainText('using the demo photo');
+    await expect(page.locator('.photo')).toHaveAttribute('src', '/photos/Star-news-file-image.webp');
+    // The demo photo's own centre pixel; cover geometry keeps the image centre at the window centre.
+    const demoCentre = await page.evaluate(async () => {
+      const img = new Image();
+      img.src = '/photos/Star-news-file-image.webp';
+      await img.decode();
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth;
+      c.height = img.naturalHeight;
+      const ctx = c.getContext('2d')!;
+      ctx.drawImage(img, 0, 0);
+      return Array.from(ctx.getImageData(Math.floor(c.width / 2), Math.floor(c.height / 2), 1, 1).data.slice(0, 3));
+    });
+    // common-card photo window: 0..1080 × 0..651 → centre (540, 325).
+    const [exported] = await exportPixels(page, [{ x: 540, y: 325 }]);
+    for (let i = 0; i < 3; i += 1) expect(Math.abs(exported![i]! - demoCentre[i]!)).toBeLessThan(40);
+  });
+
+  test('the editor chrome is English; Bengali only in card content', async ({ page }) => {
+    await mockArticle(page, { category: 'খেলা' });
+    await generate(page);
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    await expect(page.locator('.card')).toHaveAttribute('lang', 'bn');
+    const bengaliChrome = await page.locator('.controls').evaluate((root) => {
+      const hits: string[] = [];
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        const parent = n.parentElement!;
+        // Card-content values: preset options, the category suggestions and Bengali field contents.
+        if (parent.closest('option, datalist, [lang="bn"]')) continue;
+        if (/[ঀ-৿]/.test(n.textContent ?? '')) hits.push((n.textContent ?? '').trim());
+      }
+      for (const el of root.querySelectorAll('[aria-label], [title], [placeholder]')) {
+        for (const attr of ['aria-label', 'title']) {
+          const v = el.getAttribute(attr);
+          if (v && /[ঀ-৿]/.test(v)) hits.push(`${attr}=${v}`);
+        }
+      }
+      return hits;
+    });
+    expect(bengaliChrome).toEqual([]);
   });
 
   test(`downloads a ${CARD_W} × ${CARD_H} PNG`, async ({ page }) => {
@@ -224,31 +314,31 @@ test.describe('photocard generator', () => {
     const png = await downloadPng(page);
     expect(png.name).toMatch(/^star-news-photocard-\d{8}-\d{6}\.png$/);
     expect(png).toMatchObject({ width: CARD_W, height: CARD_H });
-    await expect(page.getByRole('status')).toContainText(`PNG ডাউনলোড হয়েছে (ঠিক ${CARD_W} × ${CARD_H})`);
+    await expect(page.getByRole('status')).toContainText(`PNG downloaded at exactly ${CARD_W} × ${CARD_H}`);
   });
 
   test('custom mode: breaking news is text-only', async ({ page }) => {
     await open(page);
-    await pickTemplate(page, /ব্রেকিং নিউজ/);
-    await expect(page.getByLabel('স্টার নিউজের সংবাদের লিংক')).toHaveCount(0);
+    await pickTemplate(page, /Breaking News/);
+    await expect(page.getByLabel('Star News article link')).toHaveCount(0);
     await expect(page.locator('input[type=file]')).toHaveCount(0);
     await expect(page.locator('.photo-window')).toHaveCount(0);
     await expect(page.locator('.card-date')).toHaveText(todayBanglaDate());
-    await expect(page.getByRole('button', { name: 'PNG ডাউনলোড' })).toBeDisabled();
-    await page.getByLabel('শিরোনাম', { exact: true }).fill('মিরপুরে স্বাস্থ্যকেন্দ্রে হামলা');
+    await expect(page.getByRole('button', { name: 'Download PNG' })).toBeDisabled();
+    await page.getByLabel('Headline', { exact: true }).fill('মিরপুরে স্বাস্থ্যকেন্দ্রে হামলা');
     await expectQrEncodes(page, 'https://starnews.com.bd');
-    await expect(page.getByRole('button', { name: 'PNG ডাউনলোড' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Download PNG' })).toBeEnabled();
     expect(await downloadPng(page)).toMatchObject({ width: CARD_W, height: CARD_H });
   });
 
   test('custom mode: just-in needs an uploaded photo before export', async ({ page }) => {
     await open(page);
-    await pickTemplate(page, /সদ্য প্রাপ্ত/);
-    await expect(page.getByLabel('স্টার নিউজের সংবাদের লিংক')).toHaveCount(0);
-    await page.getByLabel('শিরোনাম', { exact: true }).fill('আগামী দুই মাসে প্রধানমন্ত্রীর তিন দেশ সফরের প্রস্তুতি');
-    await expect(page.getByRole('button', { name: 'PNG ডাউনলোড' })).toBeDisabled();
-    await page.getByLabel(/^ছবি \(আবশ্যক/).setInputFiles(UPLOAD_PHOTO);
-    await expect(page.getByRole('button', { name: 'PNG ডাউনলোড' })).toBeEnabled();
+    await pickTemplate(page, /Just In/);
+    await expect(page.getByLabel('Star News article link')).toHaveCount(0);
+    await page.getByLabel('Headline', { exact: true }).fill('আগামী দুই মাসে প্রধানমন্ত্রীর তিন দেশ সফরের প্রস্তুতি');
+    await expect(page.getByRole('button', { name: 'Download PNG' })).toBeDisabled();
+    await page.getByLabel(/^Photo \(required/).setInputFiles(UPLOAD_PHOTO);
+    await expect(page.getByRole('button', { name: 'Download PNG' })).toBeEnabled();
     await expect(page.locator('.card-date')).toHaveText(todayBanglaDate());
     await expectQrEncodes(page, 'https://starnews.com.bd');
     expect(await downloadPng(page)).toMatchObject({ width: CARD_W, height: CARD_H });
@@ -256,12 +346,12 @@ test.describe('photocard generator', () => {
 
   test('reset re-applies the auto-date and keeps the card type', async ({ page }) => {
     await open(page);
-    await pickTemplate(page, /ব্রেকিং নিউজ/);
-    await page.getByLabel('তারিখ', { exact: true }).fill('১ জানুয়ারি ২০২০');
+    await pickTemplate(page, /Breaking News/);
+    await page.getByLabel('Date', { exact: true }).fill('১ জানুয়ারি ২০২০');
     page.once('dialog', (dialog) => void dialog.accept());
-    await page.getByRole('button', { name: 'রিসেট', exact: true }).click();
-    await expect(page.getByLabel('তারিখ', { exact: true })).toHaveValue(todayBanglaDate());
-    await expect(page.getByRole('radio', { name: /ব্রেকিং নিউজ/ })).toBeChecked();
+    await page.getByRole('button', { name: 'Reset', exact: true }).click();
+    await expect(page.getByLabel('Date', { exact: true })).toHaveValue(todayBanglaDate());
+    await expect(page.getByRole('radio', { name: /Breaking News/ })).toBeChecked();
   });
 
   test('export fails loudly instead of swapping in the stock photo', async ({ page }) => {
@@ -270,8 +360,8 @@ test.describe('photocard generator', () => {
     );
     await mockArticle(page, { imageUrl: '/api/image?token=expired' });
     await generate(page);
-    await page.getByRole('button', { name: 'PNG ডাউনলোড' }).click();
-    await expect(page.getByRole('status')).toContainText('কার্ডের ছবি লোড করা যায়নি');
+    await page.getByRole('button', { name: 'Download PNG' }).click();
+    await expect(page.getByRole('status')).toContainText('couldn’t load the card photo');
   });
 
   test('every template renders its artwork and exports at full size', async ({ page }) => {
@@ -282,11 +372,11 @@ test.describe('photocard generator', () => {
     expect(count).toBe(6);
     for (let i = 0; i < count; i += 1) {
       await radios.nth(i).check({ force: true });
-      if (await page.getByLabel(/^ছবি \(আবশ্যক/).count()) {
-        await page.getByLabel(/^ছবি \(আবশ্যক/).setInputFiles(UPLOAD_PHOTO);
+      if (await page.getByLabel(/^Photo \(required/).count()) {
+        await page.getByLabel(/^Photo \(required/).setInputFiles(UPLOAD_PHOTO);
       }
       await expect(page.locator('.card-date')).toHaveText(todayBanglaDate());
-      const custom = (await page.getByLabel('স্টার নিউজের সংবাদের লিংক').count()) === 0;
+      const custom = (await page.getByLabel('Star News article link').count()) === 0;
       await expectQrEncodes(page, custom ? 'https://starnews.com.bd' : ARTICLE_URL);
       const loaded = await page
         .locator('.card-template')
@@ -300,8 +390,8 @@ test.describe('photocard generator', () => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await mockArticle(page, {});
     await generate(page);
-    const qrLabel = page.getByText(/^QR-এর অবস্থান:/);
-    const titleLabel = page.getByText(/^শিরোনামের অবস্থান:/);
+    const qrLabel = page.getByText(/^QR position:/);
+    const titleLabel = page.getByText(/^Headline position:/);
     const qrBefore = await qrLabel.textContent();
     const titleBefore = await titleLabel.textContent();
     const frame = (await page.locator('.preview-frame').boundingBox())!;
@@ -327,7 +417,7 @@ test.describe('photocard generator', () => {
     for (const width of [320, 375, 768, 1024]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto('/');
-      await expect(page.getByRole('heading', { name: 'ফটোকার্ড জেনারেটর' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Photocard Generator' })).toBeVisible();
       await expect(page.getByText(DIMENSIONS).first()).toBeVisible();
       // The card must not widen the layout (mobile browsers would zoom the whole tool out).
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
