@@ -5,11 +5,13 @@ import {
   extractArticle,
   extractCanonicalUrl,
   extractCategory,
+  urlSectionCategory,
   extractImageCandidates,
   getBestSrcsetUrl,
   normalizeImageUrl,
 } from '../../src/lib/article/extractArticle';
 import { isRtvHost, isStarNewsHost, normalizeArticleUrl, resolveRedirect, shortArticleUrl } from '../../src/lib/article/normalizeArticleUrl';
+import { CATEGORY_PRESETS } from '../../src/lib/card/photoTag';
 import { fetchArticleHtml, fetchImageBytes, probeImage, verifyImageSignature } from '../../src/lib/security/boundedFetch';
 import { signImageUrl, verifyImageToken } from '../../src/lib/security/imageToken';
 
@@ -281,13 +283,14 @@ describe('image tokens', () => {
 });
 
 describe('category, canonical URL and image priority', () => {
-  const article = new URL('https://starnews.com.bd/country/25787/some-story');
+  // An unmapped section, so these tests exercise the menu-link fallback rather than the URL map.
+  const article = new URL('https://starnews.com.bd/metro/25787/some-story');
   const menu = (href: string, text: string) =>
     `<li class="uc-parent"><div class="mobile-menu-parent"><a href="${href}">${text}</a></div></li>`;
 
   it('prefers article:section, then JSON-LD articleSection, then a validated menu link', () => {
     const jsonLd = '<script type="application/ld+json">{"@type":"NewsArticle","articleSection":["সারাদেশ","x"]}</script>';
-    const menuLink = menu('https://starnews.com.bd/country', 'দেশ');
+    const menuLink = menu('https://starnews.com.bd/metro', 'দেশ');
     expect(extractCategory(`<meta property="article:section" content="রাজনীতি">${jsonLd}${menuLink}`, article)).toBe('রাজনীতি');
     expect(extractCategory(`${jsonLd}${menuLink}`, article)).toBe('সারাদেশ');
     expect(extractCategory(menuLink, article)).toBe('দেশ');
@@ -296,14 +299,14 @@ describe('category, canonical URL and image priority', () => {
   it('skips site-wide menu links outside the article section', () => {
     const html = [
       menu('https://starnews.com.bd/division/rangpur', 'রংপুর'), // first menu item, wrong section
-      menu('https://evil.test/country/x', 'ভুয়া'), // right path, wrong host
-      menu('/country/dhaka', 'ঢাকা &amp; আশপাশ'), // relative, same section
+      menu('https://evil.test/metro/x', 'ভুয়া'), // right path, wrong host
+      menu('/metro/dhaka', 'ঢাকা &amp; আশপাশ'), // relative, same section
     ].join('');
     expect(extractCategory(html, article)).toBe('ঢাকা & আশপাশ');
     expect(extractCategory(menu('https://starnews.com.bd/division/rangpur', 'রংপুর'), article)).toBeNull();
-    // The brief's example: a /division/ article accepts the /division/rangpur link.
+    // A link in the article's own (unmapped) section is accepted.
     expect(
-      extractCategory(menu('https://starnews.com.bd/division/rangpur', 'রংপুর'), new URL('https://starnews.com.bd/division/123/x')),
+      extractCategory(menu('https://starnews.com.bd/zone/rangpur', 'রংপুর'), new URL('https://starnews.com.bd/zone/123/x')),
     ).toBe('রংপুর');
   });
 
@@ -324,8 +327,47 @@ describe('category, canonical URL and image priority', () => {
         </div>
       </li>`;
     expect(extractCategory(html, new URL('https://starnews.com.bd/sports/25803/story.html'))).toBe('খেলা');
-    // /country/ articles have no /country menu link on the live site → no category.
-    expect(extractCategory(html, new URL('https://starnews.com.bd/country/25807/story.html'))).toBeNull();
+    // /country/ has no /country menu link on the live site; the URL-section map covers it.
+    expect(extractCategory(html, new URL('https://starnews.com.bd/country/25807/story.html'))).toBe('সারা দেশ');
+  });
+
+  it('maps the URL section to the editor category (no meta, no JSON-LD on the live site)', () => {
+    const cases: Array<[string, string | null]> = [
+      ['https://starnews.com.bd/national/1/x.html', 'জাতীয়'],
+      ['https://starnews.com.bd/politics/1/x.html', 'রাজনীতি'],
+      ['https://starnews.com.bd/country/25819/accused-in-tajmin-murder-case.html', 'সারা দেশ'],
+      ['https://starnews.com.bd/districts.html', 'সারা দেশ'],
+      ['https://starnews.com.bd/division/rangpur', 'সারা দেশ'],
+      ['https://starnews.com.bd/international/1/x.html', 'বিশ্ব'],
+      ['https://starnews.com.bd/sports/1/x.html', 'খেলা'],
+      ['https://starnews.com.bd/entertainment/1/x.html', 'বিনোদন'],
+      ['https://starnews.com.bd/economic/1/x.html', 'বাণিজ্য'],
+      ['https://starnews.com.bd/opinion/1/x.html', 'মতামত'],
+      ['https://starnews.com.bd/lifestyle/1/x.html', 'লাইফস্টাইল'],
+      ['https://starnews.com.bd/law-and-crime/1/x.html', 'আইন ও আদালত'],
+      ['https://starnews.com.bd/information-technology/1/x.html', 'প্রযুক্তি'],
+      ['https://starnews.com.bd/others/star-special', 'স্টার বিশেষ'],
+      ['https://starnews.com.bd/others/education.html', 'শিক্ষা'],
+      ['https://starnews.com.bd/others/health', 'স্বাস্থ্য'],
+      ['https://starnews.com.bd/others/weather-upadte', 'আবহাওয়া'],
+      ['https://starnews.com.bd/others/jobs', 'চাকরি'],
+      ['https://starnews.com.bd/others/campus', 'ক্যাম্পাস'],
+      ['https://starnews.com.bd/SPORTS/1/x.html', 'খেলা'],
+      ['https://starnews.com.bd/others/25823/x.html', null], // article under "others": sub-section unknown
+      ['https://starnews.com.bd/unknown-section/1/x.html', null],
+    ];
+    for (const [url, expected] of cases) expect(urlSectionCategory(new URL(url)), url).toBe(expected);
+    // Every mapped value is one of the dropdown presets.
+    for (const [url, expected] of cases) if (expected) expect(CATEGORY_PRESETS, url).toContain(expected);
+    // Through extractArticle, for the live article that had no category.
+    const live = extractArticle(
+      '<meta property="og:title" content="T"><meta property="og:image" content="https://starnews.com.bd/image/postimg/6ac902b8a973c.webp">',
+      new URL('https://starnews.com.bd/country/25819/accused-in-tajmin-murder-case-brought-to-cumilla-mobile-phone-recovered.html'),
+    );
+    expect(live.category).toBe('সারা দেশ');
+    expect(live.imageCandidates[0]).toBe('https://starnews.com.bd/image/postimg/6ac902b8a973c.webp');
+    // Explicit page metadata still wins over the URL.
+    expect(extractCategory('<meta property="article:section" content="অপরাধ">', new URL('https://starnews.com.bd/country/1/x'))).toBe('অপরাধ');
   });
 
   it('extracts the canonical URL: link rel=canonical, then og:url, else null', () => {
@@ -367,6 +409,7 @@ describe('category, canonical URL and image priority', () => {
 });
 
 it("extracts flat live-site section links without taking a related article title", () => {
- const url = new URL("https://starnews.com.bd/politics/25809/example.html");
- expect(extractCategory(`<a href="/politics/9/other.html">Other headline</a><a href="/politics.html">Politics</a>`, url)).toBe("Politics");
+ // Unmapped section, so the flat-link fallback is what answers.
+ const url = new URL("https://starnews.com.bd/features/25809/example.html");
+ expect(extractCategory(`<a href="/features/9/other.html">Other headline</a><a href="/features.html">Features</a>`, url)).toBe("Features");
 });

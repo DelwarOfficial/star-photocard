@@ -78,7 +78,7 @@ export async function handleArticle(request: Request, clientAddress: string | un
     const cacheKey = await hashedArticleCacheKey(startUrl.href, new URL(request.url).origin);
     let cache: Cache | undefined;
     try {
-      cache = await caches.open('star-photocard-article-v2');
+      cache = await caches.open('star-photocard-article-v3');
       const hit = await matchCache(cache, cacheKey);
       if (hit) {
         const payload = (await hit.json()) as { data?: Record<string, unknown> };

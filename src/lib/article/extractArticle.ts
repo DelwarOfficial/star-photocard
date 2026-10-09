@@ -152,7 +152,44 @@ export function extractCategory(html: string, pageUrl: URL): string | null {
   if (meta) return meta;
   const jsonLd = cleanCategory(firstJsonLdArticleSection(html));
   if (jsonLd) return jsonLd;
-  return menuCategory(html, pageUrl) ?? sectionLinkCategory(html, pageUrl);
+  return urlSectionCategory(pageUrl) ?? menuCategory(html, pageUrl) ?? sectionLinkCategory(html, pageUrl);
+}
+
+/**
+ * Star News URL sections → editor category presets. Article URLs carry the section as the
+ * first path segment (/country/25819/slug.html); "others" sub-sections appear as a second
+ * segment on section pages (/others/campus). Unknown sections return null.
+ */
+const SECTION_CATEGORIES: Readonly<Record<string, string>> = {
+  national: 'জাতীয়',
+  politics: 'রাজনীতি',
+  country: 'সারা দেশ',
+  districts: 'সারা দেশ',
+  division: 'সারা দেশ',
+  international: 'বিশ্ব',
+  sports: 'খেলা',
+  entertainment: 'বিনোদন',
+  economic: 'বাণিজ্য',
+  opinion: 'মতামত',
+  lifestyle: 'লাইফস্টাইল',
+  'law-and-crime': 'আইন ও আদালত',
+  'information-technology': 'প্রযুক্তি',
+  'others/star-special': 'স্টার বিশেষ',
+  'others/education': 'শিক্ষা',
+  'others/health': 'স্বাস্থ্য',
+  'others/weather-upadte': 'আবহাওয়া', // sic: the site's own spelling
+  'others/jobs': 'চাকরি',
+  'others/campus': 'ক্যাম্পাস',
+};
+
+export function urlSectionCategory(pageUrl: URL): string | null {
+  const [first, second] = pageUrl.pathname
+    .split('/')
+    .filter(Boolean)
+    .map((s) => s.toLowerCase().replace(/\.html?$/u, ''));
+  if (!first) return null;
+  if (second && SECTION_CATEGORIES[`${first}/${second}`]) return SECTION_CATEGORIES[`${first}/${second}`]!;
+  return SECTION_CATEGORIES[first] ?? null;
 }
 
 /** Flat top-level links (such as Politics) are not wrapped in mobile-menu-parent. */

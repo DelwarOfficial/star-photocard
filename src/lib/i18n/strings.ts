@@ -8,6 +8,12 @@ export const UI_LANG = 'en';
 export type LayerKey = 'photo' | 'title' | 'qr';
 
 export const S = {
+  footer: {
+    builtBy: 'Built by',
+    author: 'Delwar Hossain',
+    authorUrl: 'https://delwarhossain.net',
+    opensInNewTab: '(opens in a new tab)',
+  },
   page: {
     title: 'Star News Photocard Generator',
     description: 'Turn Star News articles into branded photocards for social media.',

@@ -568,6 +568,24 @@ test.describe('photocard generator', () => {
     await expect(qrLabel).toHaveText(qrBefore!);
   });
 
+  test('footer credits the author with a safe new-tab link', async ({ page }) => {
+    await open(page);
+    const footer = page.locator('footer.site-footer');
+    await footer.scrollIntoViewIfNeeded();
+    await expect(footer).toBeVisible();
+    await expect(footer).toContainText('Built by Delwar Hossain');
+    const link = footer.getByRole('link', { name: /Delwar Hossain/ });
+    await expect(link).toHaveAttribute('href', 'https://delwarhossain.net');
+    await expect(link).toHaveAttribute('target', '_blank');
+    await expect(link).toHaveAttribute('rel', /\bnoopener\b/);
+    // Fully on screen and comfortably tappable.
+    const box = (await link.boundingBox())!;
+    const width = page.viewportSize()!.width;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+  });
+
   test('responsive widths do not break the workspace', async ({ page }) => {
     for (const width of [320, 375, 768, 1024]) {
       await page.setViewportSize({ width, height: 900 });
