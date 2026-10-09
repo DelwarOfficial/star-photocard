@@ -60,6 +60,11 @@ const baseCardState: CardState = {
   isDirty: false,
 };
 
+/**
+ * Convenience default for tests and reducers. Do NOT use it for server rendering:
+ * on Cloudflare Workers module-scope code runs with Date.now() === 0, so this
+ * constant's date is 1970 there. Components call createCardState() at render time.
+ */
 export const initialCardState: CardState = createCardState();
 
 /** Backwards-compatible aliases used by the first editor slice. */

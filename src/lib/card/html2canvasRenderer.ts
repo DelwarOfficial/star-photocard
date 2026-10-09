@@ -1,9 +1,9 @@
 import html2canvas from 'html2canvas';
 import { EXPORT_HEIGHT, EXPORT_WIDTH, getTemplate } from '../../config/templates';
-import { coverGeometry } from './geometry';
+import { photoGeometry } from './geometry';
 import { tokenizeTitle } from './highlightTitle';
 import { hasTag } from './photoTag';
-import { applyStyle, creditStyle, dateStyle, highlightColor, pillStyle, qrStyle, titleStyle } from './layerStyles';
+import { applyStyle, CARD_TEXT_WEIGHT, creditStyle, dateStyle, highlightColor, pillStyle, qrStyle, titleStyle } from './layerStyles';
 import { decodeImage, waitForFonts, type CardRenderer, type ExportSnapshot } from './renderer';
 
 /**
@@ -22,7 +22,7 @@ function cardFontFamily(language: string): string {
 async function loadCardFonts(family: string): Promise<void> {
   try {
     // The off-screen export DOM may use faces the page never requested; load them explicitly.
-    await Promise.all([document.fonts.load(`900 60px ${family}`), document.fonts.load(`700 30px ${family}`)]);
+    await document.fonts.load(`${CARD_TEXT_WEIGHT} 60px ${family}`);
   } catch {
     // Font loading is best-effort; fonts.ready still runs below.
   }
@@ -67,7 +67,7 @@ export class Html2CanvasRenderer implements CardRenderer {
       // Photo layer with explicit cover geometry (cards without a photo window skip it).
       const photoViewport = template.photo;
       if (photoViewport && photoImg) {
-        const drawn = coverGeometry(
+        const drawn = photoGeometry(
           { width: photoImg.naturalWidth || 1920, height: photoImg.naturalHeight || 1080 },
           photoViewport,
           snapshot.state.imageScale,

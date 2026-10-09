@@ -107,19 +107,25 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
     // Probe image candidates in order (headers + magic bytes only); first valid wins.
     // /api/image does the full bounded download when the client requests it.
     let imageUrl: string | undefined;
-    for (const candidate of article.imageCandidates.slice(0, MAX_IMAGE_PROBES)) {
-      try {
-        await probeImage(new URL(candidate), { timeoutMs: IMAGE_PROBE_TIMEOUT_MS });
-        if (secret.length >= 32) {
+    // Images are served only through signed /api/image links. Without the secret the
+    // article photo cannot be delivered; say so explicitly instead of "no image found".
+    const signingReady = secret.length >= 32;
+    let imageNotice: 'signing-unconfigured' | undefined;
+    if (!signingReady) {
+      if (article.imageCandidates.length > 0) {
+        imageNotice = 'signing-unconfigured';
+        console.warn(JSON.stringify({ requestId, event: 'image_signing_unconfigured', hint: 'set IMAGE_TOKEN_SECRET (≥32 chars) in .dev.vars or as a Worker secret' }));
+      }
+    } else {
+      for (const candidate of article.imageCandidates.slice(0, MAX_IMAGE_PROBES)) {
+        try {
+          await probeImage(new URL(candidate), { timeoutMs: IMAGE_PROBE_TIMEOUT_MS });
           const token = await signImageUrl(candidate, secret);
           imageUrl = `/api/image?token=${encodeURIComponent(token)}`;
-        } else {
-          // Without a signing secret (local dev), expose nothing cross-origin; client falls back.
-          imageUrl = undefined;
+          break;
+        } catch {
+          continue;
         }
-        break;
-      } catch {
-        continue;
       }
     }
 
@@ -133,6 +139,7 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
       dateSource: article.dateSource,
       language: article.language,
       ...(imageUrl ? { imageUrl } : {}),
+      ...(imageNotice ? { imageNotice } : {}),
     };
 
     // Cached payloads carry a signed image link; never cache longer than that link lives.

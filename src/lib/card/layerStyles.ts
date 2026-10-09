@@ -9,6 +9,8 @@ import type { CardState } from './types';
 export type LayerStyle = Readonly<Record<string, string | number>>;
 
 const TITLE_LINE_HEIGHT = 1.3;
+/** All card text (headline, date, pill, credit) uses StarNews SemiBold. */
+export const CARD_TEXT_WEIGHT = 600;
 const PHOTO_TITLE_SHADOW = '0 3px 10px rgba(0,0,0,.75)';
 const QR_RADIUS = 10;
 
@@ -19,7 +21,7 @@ export function dateStyle(template: TemplateDefinition): LayerStyle {
     top: template.date.y,
     width: template.date.width,
     fontSize: template.date.fontSize,
-    fontWeight: 700,
+    fontWeight: CARD_TEXT_WEIGHT,
     lineHeight: 1.15,
     color: template.dateColor,
     textAlign: template.dateAlign,
@@ -41,7 +43,7 @@ export function pillStyle(template: TemplateDefinition): LayerStyle | null {
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: pill.fontSize,
-    fontWeight: 700,
+    fontWeight: CARD_TEXT_WEIGHT,
     lineHeight: 1,
     color: '#000000',
     whiteSpace: 'nowrap',
@@ -59,7 +61,7 @@ export function creditStyle(template: TemplateDefinition): LayerStyle | null {
     top: credit.y,
     padding: `${Math.round(credit.fontSize * 0.3)}px ${Math.round(credit.fontSize * 0.5)}px`,
     fontSize: credit.fontSize,
-    fontWeight: 700,
+    fontWeight: CARD_TEXT_WEIGHT,
     lineHeight: 1.2,
     color: '#ffffff',
     background: 'rgba(0,0,0,.62)',
@@ -75,8 +77,7 @@ export function titleStyle(template: TemplateDefinition, state: CardState): Laye
     top: state.titlePosition.y,
     width: template.title.width,
     fontSize: state.fontSize,
-    // Reference cards set headlines in StarNews Bold (700), not Black.
-    fontWeight: 700,
+    fontWeight: CARD_TEXT_WEIGHT,
     lineHeight: TITLE_LINE_HEIGHT,
     textAlign: 'center',
     color: template.titleColor,

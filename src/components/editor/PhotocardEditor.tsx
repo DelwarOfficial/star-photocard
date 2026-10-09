@@ -8,7 +8,7 @@ import { hasTag, PHOTO_CREDIT_PRESETS, PHOTO_TAG_MAX_LENGTH, PHOTO_TAG_PRESETS }
 import { cardReducer, clampFontSize, clampZoom, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from '../../lib/card/reducer';
 import { downloadFilename, isClipboardSupported } from '../../lib/card/renderer';
 import { creditStyle, highlightColor, pillStyle, qrStyle, dateStyle, titleStyle } from '../../lib/card/layerStyles';
-import { FALLBACK_IMAGE_SRC, initialCardState } from '../../lib/card/types';
+import { createCardState, FALLBACK_IMAGE_SRC } from '../../lib/card/types';
 import { todayBanglaDate } from '../../lib/text/dates';
 import { S, UI_LANG, type LayerKey } from '../../lib/i18n/strings';
 import { Icon, StarMark } from './Icon';
@@ -22,6 +22,8 @@ type ArticlePayload = {
   category?: string | null;
   language: 'bn' | 'en';
   imageUrl?: string;
+  /** Set when the article has photos the server could not serve (no signing secret). */
+  imageNotice?: 'signing-unconfigured';
 };
 
 type StatusTone = 'info' | 'success' | 'warning' | 'error';
@@ -63,7 +65,10 @@ function exportFailureMessage(err: unknown, action: 'download' | 'copy'): string
 }
 
 export default function PhotocardEditor() {
-  const [card, dispatch] = useReducer(cardReducer, initialCardState);
+  // Build the initial card (and its auto-date) at render time, never at module load:
+  // Cloudflare Workers freeze Date.now() at 0 during module init, which rendered
+  // "০১ জানুয়ারি ১৯৭০" on the server and caused hydration error #418.
+  const [card, dispatch] = useReducer(cardReducer, undefined, () => createCardState());
   const [status, setStatus] = useState<{ tone: StatusTone; text: string }>({
     tone: 'info',
     text: S.status.initial,
@@ -207,7 +212,9 @@ export default function PhotocardEditor() {
         type: 'SET_FONT_SIZE',
         size: Math.min(titleFontSize(data.title), template.title.maxFontSize),
       });
-      if (!data.imageUrl) {
+      if (data.imageNotice === 'signing-unconfigured') {
+        announce('warning', S.status.readySigningOff);
+      } else if (!data.imageUrl) {
         announce('warning', S.status.readyDemo);
       } else {
         announce('success', S.status.ready);
@@ -874,7 +881,8 @@ export default function PhotocardEditor() {
                   </DraggableLayer>
                 )}
                 <img className="card-template" src={template.src} alt="" draggable={false} />
-                <div className="card-date" style={dateStyle(template) as React.CSSProperties}>
+                {/* A render that straddles Dhaka midnight may differ by a day; the client value wins. */}
+                <div className="card-date" style={dateStyle(template) as React.CSSProperties} suppressHydrationWarning>
                   {card.publicationDate}
                 </div>
                 {credit && (
