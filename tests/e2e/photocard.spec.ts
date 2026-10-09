@@ -562,12 +562,33 @@ test.describe('photocard generator', () => {
   test('responsive widths do not break the workspace', async ({ page }) => {
     for (const width of [320, 375, 768, 1024]) {
       await page.setViewportSize({ width, height: 900 });
-      await page.goto('/');
+      await open(page);
       await expect(page.getByRole('heading', { name: 'Photocard Generator' })).toBeVisible();
       await expect(page.getByText(DIMENSIONS).first()).toBeVisible();
       // The card must not widen the layout (mobile browsers would zoom the whole tool out).
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(0);
+    }
+  });
+
+  test('narrow layout contains header and export controls across font metrics', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 900 });
+    await open(page);
+    for (const font of ['Arial', 'Verdana', 'Tahoma']) {
+      const style = await page.addStyleTag({ content: `:root { font-family: ${font}, sans-serif; letter-spacing: .04em; }` });
+      const bounds = await page.evaluate(() => {
+        const header = document.querySelector('.app-header')!.getBoundingClientRect();
+        const toolbar = document.querySelector('.toolbar')!.getBoundingClientRect();
+        const actions = document.querySelector('.export-actions')!.getBoundingClientRect();
+        const buttons = [...document.querySelectorAll('.export-actions .button')].map(button => button.getBoundingClientRect());
+        return {
+          overflow: document.documentElement.scrollWidth - innerWidth,
+          headerContainsToolbar: toolbar.left >= header.left && toolbar.right <= header.right,
+          actionsContainButtons: buttons.every(button => button.left >= actions.left && button.right <= actions.right),
+        };
+      });
+      expect(bounds, `320px with ${font}`).toEqual({ overflow: 0, headerContainsToolbar: true, actionsContainButtons: true });
+      await style.evaluate(element => element.parentNode?.removeChild(element));
     }
   });
 
@@ -595,27 +616,47 @@ test.describe('photocard generator', () => {
     await expect(page.locator('.card-pill')).toHaveText('Manual');
   });
   test('edits during fetch cancel the old composition request', async ({ page }) => {
-    await page.route('**/api/article', async route => {
-      await new Promise(resolve => setTimeout(resolve, 400));
-      await route.fulfill({ json: { data: { canonicalUrl: ARTICLE_URL, title: 'Old server headline', language: 'bn' } } }).catch(() => {});
+    let abortedRequests = 0;
+    page.on('requestfailed', request => {
+      if (new URL(request.url()).pathname === '/api/article') abortedRequests++;
     });
+    const pending: Array<{ release: () => void; handled: Promise<void> }> = [];
+    await page.route('**/api/article', async route => {
+      let release!: () => void;
+      let finish!: () => void;
+      const gate = new Promise<void>(resolve => { release = resolve; });
+      const handled = new Promise<void>(resolve => { finish = resolve; });
+      pending.push({ release, handled });
+      await gate;
+      await route.fulfill({ json: { data: { canonicalUrl: ARTICLE_URL, title: 'Old server headline', language: 'bn' } } }).catch(() => {});
+      finish();
+    });
+    const startRequest = async (count: number) => {
+      await page.getByRole('button', { name: 'Generate', exact: true }).click();
+      await expect.poll(() => pending.length).toBe(count);
+      await expect(page.getByRole('status')).toContainText('Fetching');
+    };
+    const releaseAfterEdit = async (index: number) => {
+      await expect.poll(() => abortedRequests).toBe(index + 1);
+      const request = pending[index]!;
+      request.release();
+      await request.handled;
+      await expect(page.getByLabel('Headline', { exact: true })).toHaveValue('Keep my edit');
+    };
     await open(page);
     await page.getByLabel('Star News article link').fill(ARTICLE_URL);
-    await page.getByRole('button', { name: 'Generate', exact: true }).click();
+    await startRequest(1);
     await page.getByLabel('Headline', { exact: true }).fill('Keep my edit');
     await expect(page.getByRole('status')).toContainText('latest edits');
-    await page.waitForTimeout(600);
-    await expect(page.getByLabel('Headline', { exact: true })).toHaveValue('Keep my edit');
-    await page.getByRole('button', { name: 'Generate', exact: true }).click();
+    await releaseAfterEdit(0);
+    await startRequest(2);
     await page.locator('input[type="file"]').setInputFiles(UPLOAD_PHOTO);
     const uploadedSrc = await page.locator('.photo').getAttribute('src');
-    await page.waitForTimeout(600);
+    await releaseAfterEdit(1);
     await expect(page.locator('.photo')).toHaveAttribute('src', uploadedSrc!);
-    await expect(page.getByLabel('Headline', { exact: true })).toHaveValue('Keep my edit');
-    await page.getByRole('button', { name: 'Generate', exact: true }).click();
+    await startRequest(3);
     await pickTemplate(page, /Breaking News/);
-    await page.waitForTimeout(600);
-    await expect(page.getByLabel('Headline', { exact: true })).toHaveValue('Keep my edit');
+    await releaseAfterEdit(2);
   });
   test('retained article image exports after its signed endpoint expires', async ({ page }) => {
     let calls = 0;

@@ -13,7 +13,7 @@ test('stable SSR date hydrates cleanly and the declared favicon loads', async ({
   await page.locator('astro-island:not([ssr])').waitFor({ state: 'attached' });
   await expect(page.getByLabel('Date', { exact: true })).toHaveValue(todayBanglaDate());
   const favicon = await page.locator('link[rel="icon"]').getAttribute('href');
-  expect(favicon).toBe('/photos/Star-news-file-image.webp');
+  expect(favicon).toBe('/photos/favicon.png');
   expect((await request.get(favicon!)).status()).toBe(200);
   expect(errors).toEqual([]);
 });

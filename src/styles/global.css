@@ -29,12 +29,13 @@ input,textarea{caret-color:var(--signal)}
 
 /* ---------- Shell + header ---------- */
 .app-shell{max-width:1480px;margin:auto;padding:20px 24px 40px}
-.app-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:6px 0 18px;margin-bottom:22px;border-bottom:1px solid var(--line)}
+/* Wraps on very narrow screens: the title's longest word + the toolbar must never force horizontal scroll. */
+.app-header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 16px;padding:6px 0 18px;margin-bottom:22px;border-bottom:1px solid var(--line)}
 .brand{display:flex;align-items:center;gap:14px}
 .star-mark{color:var(--signal);flex:none}
 .app-header h1{margin:0;font-size:clamp(1.45rem,3vw,2rem);font-weight:850;letter-spacing:-.02em;line-height:1.1}
 .subhead{margin:4px 0 0;color:var(--muted);font-size:.86rem}
-.toolbar{display:flex;align-items:center;gap:12px}
+.toolbar{display:flex;align-items:center;gap:12px;margin-left:auto}
 .header-status{display:flex;align-items:center;gap:8px;margin:0;color:var(--muted);font-size:.85rem;white-space:nowrap}
 .status-dot{width:8px;height:8px;border-radius:50%;background:#b4ada2}
 .status-dot.ok{background:#1c7a3d}
@@ -94,7 +95,9 @@ input,textarea{caret-color:var(--signal)}
 .chip:disabled{opacity:.45;cursor:not-allowed}
 .chip[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:#fff}
 .spinner{width:16px;height:16px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .7s linear infinite}
-.export-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+/* Side by side when both fit, stacked when a label cannot fit half the width (any font). */
+.export-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+.export-actions .button{flex:1 1 9rem}
 
 /* ---------- Template picker ---------- */
 .picker{position:relative}
