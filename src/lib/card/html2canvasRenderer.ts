@@ -4,7 +4,7 @@ import { effectivePhotoFit, photoGeometry } from './geometry';
 import { titleFits } from './titleBounds';
 import { tokenizeTitle } from './highlightTitle';
 import { hasTag } from './photoTag';
-import { applyStyle, CARD_TEXT_WEIGHT, creditStyle, dateStyle, highlightColor, pillStyle, qrStyle, titleStyle } from './layerStyles';
+import { applyStyle, CARD_TEXT_WEIGHT, canvasTextMeasure, cardFontFamily, creditStyle, fitPillFontSize, dateStyle, highlightColor, pillStyle, qrStyle, titleStyle } from './layerStyles';
 import { decodeImage, waitForFonts, type CardRenderer, type ExportSnapshot } from './renderer';
 
 /**
@@ -16,9 +16,6 @@ import { decodeImage, waitForFonts, type CardRenderer, type ExportSnapshot } fro
  * Text and QR layers take their styles from layerStyles.ts, the same
  * source the preview uses, so the two cannot drift apart.
  */
-function cardFontFamily(language: string): string {
-  return language === 'en' ? 'StarEnglish' : 'StarBangla';
-}
 
 async function loadCardFonts(family: string): Promise<void> {
   try {
@@ -106,7 +103,8 @@ export class Html2CanvasRenderer implements CardRenderer {
         card.appendChild(creditEl);
       }
 
-      const pill = pillStyle(template);
+      // Same shrink-to-fit as the preview: long categories never spill out of the baked pill.
+      const pill = pillStyle(template, fitPillFontSize(template, canvasTextMeasure(snapshot.state.photoTag, fontFamily)));
       if (pill && hasTag(snapshot.state.photoTag)) {
         const tag = document.createElement('div');
         tag.textContent = snapshot.state.photoTag;

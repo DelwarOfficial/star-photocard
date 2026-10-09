@@ -9,7 +9,7 @@ Create editable Star News article and custom cards, then export a 1600 x 2000 PN
 - Today's Bengali date in Asia/Dhaka, filled after hydration, without a leading zero. The card uses the editable current date, not the article's publication date.
 - Self-hosted Bengali/English card fonts, headline highlighting, a 30-120px size dropdown and a **Fit headline** action. Overflow blocks export.
 - Photo upload, bounded drag/zoom, photo-credit presets and a **Show whole photo (no crop)** toggle. Templates default to `cover`; the toggle selects `contain` in preview and export.
-- Optional QR codes, PNG download and clipboard copy where supported. Global keyboard shortcuts require opt-in.
+- Optional QR codes, PNG download and clipboard copy where supported. Keyboard shortcuts are enabled by default and can be disabled with the checkbox.
 
 Built with Astro SSR on Cloudflare Workers, a React editor island, TypeScript, html2canvas, Vitest, Playwright and Wrangler.
 

@@ -5,6 +5,7 @@ import { CARD_HEIGHT, CARD_WIDTH, EXPORT_HEIGHT, EXPORT_SCALE, EXPORT_WIDTH, tem
 import { coverGeometry, clampPhotoOffset, clampToCanvas, effectivePhotoFit, photoGeometry, previewScale } from '../../src/lib/card/geometry';
 import { titleFontSize, tokenizeTitle } from '../../src/lib/card/highlightTitle';
 import { CATEGORY_PRESETS, normalizePhotoTag, countCodePoints } from '../../src/lib/card/photoTag';
+import { fitPillFontSize } from '../../src/lib/card/layerStyles';
 import { cardReducer, clampZoom, ZOOM_MAX, ZOOM_MIN } from '../../src/lib/card/reducer';
 import { createCardState, initialCardState } from '../../src/lib/card/types';
 import { formatDhakaDate, parseArticleDate, toBanglaDigits, todayBanglaDate } from '../../src/lib/text/dates';
@@ -123,6 +124,26 @@ describe('dates', () => {
     expect(parseArticleDate('')).toBeNull();
     expect(parseArticleDate('2026-02-29')).toBeNull(); // 2026 is not a leap year
     expect(parseArticleDate('2024-02-29T00:00:00Z')).not.toBeNull();
+  });
+});
+
+describe('pill fit', () => {
+  const common = templates.find((t) => t.id === 'common-card')!;
+  const pill = common.photoTag!;
+  // Fake measurer: width grows linearly with font size (n chars at 0.6em each).
+  const measureFor = (chars: number) => (size: number) => chars * size * 0.6;
+  it('keeps the template size when the text fits, shrinks just enough when it does not', () => {
+    expect(fitPillFontSize(common, measureFor(4))).toBe(pill.fontSize);
+    const size = fitPillFontSize(common, measureFor(11));
+    expect(size).toBeLessThan(pill.fontSize);
+    expect(11 * size * 0.6).toBeLessThanOrEqual(pill.width - 12);
+    expect(11 * (size + 1) * 0.6).toBeGreaterThan(pill.width - 12);
+  });
+  it('never shrinks below 60% of the template size', () => {
+    expect(fitPillFontSize(common, measureFor(40))).toBe(Math.ceil(pill.fontSize * 0.6));
+  });
+  it('is 0 for templates without a pill', () => {
+    expect(fitPillFontSize(templates.find((t) => t.id === 'breaking-news')!, measureFor(4))).toBe(0);
   });
 });
 

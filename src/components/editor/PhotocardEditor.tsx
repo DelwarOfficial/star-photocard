@@ -8,7 +8,7 @@ import { CATEGORY_PRESETS, hasTag, PHOTO_CREDIT_PRESETS, PHOTO_TAG_MAX_LENGTH } 
 import { cardReducer, type CardAction, clampZoom, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from '../../lib/card/reducer';
 import { decodeImage, downloadFilename, isClipboardSupported } from '../../lib/card/renderer';
 import { titleFits } from '../../lib/card/titleBounds';
-import { creditStyle, highlightColor, pillStyle, qrStyle, dateStyle, titleStyle } from '../../lib/card/layerStyles';
+import { CARD_TEXT_WEIGHT, canvasTextMeasure, cardFontFamily, creditStyle, fitPillFontSize, highlightColor, pillStyle, qrStyle, dateStyle, titleStyle } from '../../lib/card/layerStyles';
 import { createCardState, FALLBACK_IMAGE_SRC } from '../../lib/card/types';
 import { todayBanglaDate } from '../../lib/text/dates';
 import { S, UI_LANG, type LayerKey } from '../../lib/i18n/strings';
@@ -73,7 +73,7 @@ export default function PhotocardEditor() {
   // Keep SSR and the first client render stable; auto-fill the Dhaka date after mount.
   const [card, rawDispatch] = useReducer(cardReducer, undefined, () => createCardState(''));
   useEffect(() => { rawDispatch({ type: 'INITIALIZE_DATE', date: todayBanglaDate() }); }, []);
-  const [shortcutsEnabled, setShortcutsEnabled] = useState(false);
+  const [shortcutsEnabled, setShortcutsEnabled] = useState(true);
   const [headlineOverflow, setHeadlineOverflow] = useState(false);
   const [status, setStatus] = useState<{ tone: StatusTone; text: string }>({
     tone: 'info',
@@ -97,6 +97,8 @@ export default function PhotocardEditor() {
   }, []);
   // Custom credit: the text field stays open even while empty (empty custom = no tag).
   const [customCredit, setCustomCredit] = useState(false);
+  // Pill text shrinks to fit the baked pill; measured with the loaded card font (same as export).
+  const [pillFontSize, setPillFontSize] = useState<number | undefined>(undefined);
   // Custom category: the text field stays open even while empty (empty custom = no label).
   const [customCategory, setCustomCategory] = useState(false);
   const [lastRemoteImage, setLastRemoteImage] = useState<{ src: string; kind: 'remote' | 'fallback' } | null>(null);
@@ -121,6 +123,19 @@ export default function PhotocardEditor() {
     rawDispatch(action);
   }, []);
   const template = useMemo(() => getTemplate(card.templateId), [card.templateId]);
+  useEffect(() => {
+    let cancelled = false;
+    const family = cardFontFamily(card.language);
+    void document.fonts
+      .load(`${CARD_TEXT_WEIGHT} 30px ${family}`)
+      .catch(() => undefined)
+      .then(() => {
+        if (!cancelled) setPillFontSize(fitPillFontSize(template, canvasTextMeasure(card.photoTag, family)));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [card.photoTag, card.language, template]);
   const titleHeight = (): number =>
     Math.min(template.canvas.height, titleRef.current?.offsetHeight || card.fontSize * 1.3);
   // Article cards encode the reference news link; custom cards have none, so they encode the root domain.
@@ -489,7 +504,7 @@ export default function PhotocardEditor() {
   };
   const isArticle = template.mode === 'article';
   const box = canvasBox(template, scale);
-  const pill = pillStyle(template);
+  const pill = pillStyle(template, pillFontSize);
   const credit = creditStyle(template);
   const creditIsPreset = (PHOTO_CREDIT_PRESETS as readonly string[]).includes(card.photoCredit);
   // Category dropdown: a preset, the article's own (non-preset) category, or a custom value.

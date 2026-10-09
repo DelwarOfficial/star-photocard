@@ -619,8 +619,10 @@ test.describe('photocard generator', () => {
     }
   });
 
-  test('shortcuts are opt-in and font sizes update through the dropdown', async ({ page }) => {
+  test('shortcuts default on, can be disabled, and font sizes update through the dropdown', async ({ page }) => {
     await open(page);
+    await expect(page.getByLabel('Enable keyboard shortcuts')).toBeChecked();
+    await page.getByLabel('Enable keyboard shortcuts').uncheck();
     await page.getByLabel('Headline', { exact: true }).fill('A short headline');
     await page.locator('h1').click();
     await page.keyboard.press('g');
@@ -690,6 +692,12 @@ test.describe('photocard generator', () => {
       }, `data:image/png;base64,${b64}`);
     };
     expect(await pillPixels()).toBeGreaterThan(50);
+    // Long section names shrink to fit inside the baked pill instead of being clipped.
+    await categorySelect(page).selectOption('আইন ও আদালত');
+    await expect
+      .poll(() => pill.evaluate((el) => parseFloat(getComputedStyle(el).fontSize)))
+      .toBeLessThan(30);
+    expect(await pill.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
     await categorySelect(page).selectOption('');
     await expect(pill).toHaveCount(0);
     expect(await pillPixels()).toBe(0);
