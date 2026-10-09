@@ -1,6 +1,6 @@
 ---
 name: starnews-brand
-description: StarNews product brand lock for this repository. Use when designing, restyling, polishing, or reviewing any UI here so output stays on-brand: warm paper newsroom surfaces, StarNews Black/Bold card type, signal-red primary, restrained blue info states, Bengali+English support, and the accessibility contract. This brief wins over any generic design taste.
+description: StarNews product brand lock for this repository. Use when designing, restyling, polishing, or reviewing any UI here so output stays on-brand: warm paper newsroom surfaces, StarNews SemiBold card type, signal-red primary, restrained blue info states, Bengali+English support, and the accessibility contract. This brief wins over any generic design taste.
 license: MIT
 compatibility: opencode
 metadata:
@@ -27,10 +27,8 @@ Redirecting this brief toward generic aesthetics is failure.
 ## Typography
 
 - Controls and chrome: system sans-serif stack (never a display face).
-- Generated card only: self-hosted `StarNews-Black` (900) and
-  `StarNews-Bold` (700) from `public/fonts/` — both cover Bengali and
-  English. Never load fonts from a CDN (runtime policy).
-- Card title: white, weight 900, `text-shadow` for legibility,
+- Generated card only: self-hosted `StarBangla` / `StarEnglish` at weight 600, mapped to `StarNews-SemiBold-V1.5.woff2` (WOFF fallback). Both cover Bengali and English. Never load fonts from a CDN.
+- Card title: white, weight 600, `text-shadow` for legibility,
   `text-wrap: balance`; explicit `*highlight*` renders yellow.
 
 ## Absolute bans (no brief earns these back here)
@@ -52,11 +50,11 @@ Redirecting this brief toward generic aesthetics is failure.
 - Portrait 1080 × 1350 canvas (4:5, artwork 1600 × 2000); every layer position lives in
   `src/config/templates.ts` in intrinsic pixels — no magic numbers in
   components, CSS, or the exporter. Preview, drag bounds, and export must
-  agree through the shared cover-geometry function; text/QR layer styles
+  agree through the shared contain-and-center geometry function; text/QR layer styles
   come from `src/lib/card/layerStyles.ts` for both preview and export.
 - Two creation modes: article cards (URL fetch) and custom cards
   (`just-in`: upload + text, `breaking-news`: text only). Every card is
-  auto-dated with today's Bengali date. Headline highlight is `#FFF200`.
+  auto-dated with today's editable Bengali date in Asia/Dhaka after hydration. Headline highlight is `#FFF200`.
 
 ## Next-generation mockups (captured, NOT yet implemented)
 

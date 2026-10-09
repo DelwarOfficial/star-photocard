@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { z } from 'zod';
+import { enforceRateLimit, readBoundedJson } from '../../lib/security/requestLimits';
 import { S } from '../../lib/i18n/strings';
 import { extractArticle } from '../../lib/article/extractArticle';
 import { normalizeArticleUrl } from '../../lib/article/normalizeArticleUrl';
@@ -17,6 +18,7 @@ const requestSchema = z.object({ url: z.string().trim().min(1).max(2048) }).stri
 const messages: Record<string, readonly [string, string, number]> = {
   INVALID_URL: ['INVALID_URL', S.api.invalidUrl, 400],
   INVALID_HOST: ['INVALID_HOST', S.api.invalidHost, 403],
+  REQUEST_TOO_LARGE: ['REQUEST_TOO_LARGE', 'The request body is too large.', 413],
   INVALID_REQUEST: ['INVALID_REQUEST', S.api.invalidRequest, 400],
   REDIRECT_LOOP: ['REDIRECT_REJECTED', S.api.redirectRejected, 502],
   REDIRECT_REJECTED: ['REDIRECT_REJECTED', S.api.redirectRejected, 502],
@@ -45,8 +47,6 @@ function mapError(error: unknown): readonly [string, string, number] {
 }
 
 export const POST: APIRoute = async ({ request, clientAddress }) => {
-  const requestId = crypto.randomUUID();
-  const startedAt = Date.now();
   // Cloudflare Workers runtime env (Astro v6+/adapter v13+ removed locals.runtime).
   let workerEnv: Record<string, unknown> = {};
   try {
@@ -57,36 +57,25 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
   } catch {
     workerEnv = {};
   }
+  return handleArticle(request, clientAddress, workerEnv);
+};
+
+export async function handleArticle(request: Request, clientAddress: string | undefined, workerEnv: Record<string, unknown>): Promise<Response> {
+  const requestId = crypto.randomUUID();
+  const startedAt = Date.now();
   try {
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return failure('INVALID_REQUEST', S.api.invalidRequest, 400, requestId);
-    }
+    const limited = await enforceRateLimit(workerEnv.ARTICLE_RATE_LIMITER,
+      'article:' + (request.headers.get('cf-connecting-ip') ?? clientAddress ?? 'unknown'), requestId);
+    if (limited) return limited;
+    const body = await readBoundedJson(request);
     const parsed = requestSchema.safeParse(body);
     if (!parsed.success) return failure('INVALID_REQUEST', S.api.invalidRequest, 400, requestId);
-
     const startUrl = normalizeArticleUrl(parsed.data.url);
-
-    // Rate limit before expensive upstream work (abuse protection, not exact accounting).
-    try {
-      const limiter = workerEnv.ARTICLE_RATE_LIMITER as
-        | { limit?: (opts: { key: string }) => Promise<{ success: boolean }> }
-        | undefined;
-      if (limiter?.limit) {
-        const clientIp = request.headers.get('cf-connecting-ip') ?? clientAddress ?? 'unknown';
-        const result = await limiter.limit({ key: `article:${clientIp}` });
-        if (!result.success) return failure('RATE_LIMITED', S.api.rateLimited, 429, requestId);
-      }
-    } catch {
-      // Limiter failures must not break the endpoint; continue with logging.
-    }
 
     const secret = typeof workerEnv.IMAGE_TOKEN_SECRET === 'string' ? workerEnv.IMAGE_TOKEN_SECRET : '';
 
     // Short-lived metadata cache (best-effort, token-free hashed key).
-    const cacheKey = await hashedArticleCacheKey(startUrl.href);
+    const cacheKey = await hashedArticleCacheKey(startUrl.href, new URL(request.url).origin);
     let cache: Cache | undefined;
     try {
       cache = await caches.open('star-photocard-article-v2');
@@ -170,4 +159,4 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
     console.error(JSON.stringify({ requestId, code, ms: Date.now() - startedAt }));
     return failure(code, message, status, requestId);
   }
-};
+}

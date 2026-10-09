@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { EXPORT_HEIGHT, EXPORT_SCALE, EXPORT_WIDTH, getTemplate, SITE_URL, type TemplateDefinition } from '../../config/templates';
-import { titleFontSize, tokenizeTitle } from '../../lib/card/highlightTitle';
+import { tokenizeTitle } from '../../lib/card/highlightTitle';
 import { defaultRenderer } from '../../lib/card/html2canvasRenderer';
 import { clampPhotoOffset, clampToCanvas, previewScale } from '../../lib/card/geometry';
 import { hasTag, PHOTO_CREDIT_PRESETS, PHOTO_TAG_MAX_LENGTH, PHOTO_TAG_PRESETS } from '../../lib/card/photoTag';
-import { cardReducer, clampFontSize, clampZoom, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from '../../lib/card/reducer';
-import { downloadFilename, isClipboardSupported } from '../../lib/card/renderer';
+import { cardReducer, type CardAction, clampZoom, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from '../../lib/card/reducer';
+import { decodeImage, downloadFilename, isClipboardSupported } from '../../lib/card/renderer';
+import { titleFits } from '../../lib/card/titleBounds';
 import { creditStyle, highlightColor, pillStyle, qrStyle, dateStyle, titleStyle } from '../../lib/card/layerStyles';
 import { createCardState, FALLBACK_IMAGE_SRC } from '../../lib/card/types';
 import { todayBanglaDate } from '../../lib/text/dates';
@@ -28,7 +29,7 @@ type ArticlePayload = {
 
 type StatusTone = 'info' | 'success' | 'warning' | 'error';
 
-const TITLE_SIZES = [44, 52, 60, 75];
+const TITLE_SIZES = Array.from({ length: 91 }, (_, i) => i + 30);
 
 /** Inline sizing for the card + frame; replaces the old fixed 1080 × 1080 CSS. */
 function canvasBox(template: TemplateDefinition, scale: number) {
@@ -65,10 +66,11 @@ function exportFailureMessage(err: unknown, action: 'download' | 'copy'): string
 }
 
 export default function PhotocardEditor() {
-  // Build the initial card (and its auto-date) at render time, never at module load:
-  // Cloudflare Workers freeze Date.now() at 0 during module init, which rendered
-  // "০১ জানুয়ারি ১৯৭০" on the server and caused hydration error #418.
-  const [card, dispatch] = useReducer(cardReducer, undefined, () => createCardState());
+  // Keep SSR and the first client render stable; auto-fill the Dhaka date after mount.
+  const [card, rawDispatch] = useReducer(cardReducer, undefined, () => createCardState(''));
+  useEffect(() => { rawDispatch({ type: 'INITIALIZE_DATE', date: todayBanglaDate() }); }, []);
+  const [shortcutsEnabled, setShortcutsEnabled] = useState(false);
+  const [headlineOverflow, setHeadlineOverflow] = useState(false);
   const [status, setStatus] = useState<{ tone: StatusTone; text: string }>({
     tone: 'info',
     text: S.status.initial,
@@ -96,11 +98,22 @@ export default function PhotocardEditor() {
   const requestSeq = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const localUrlRef = useRef<string | undefined>(undefined);
+  const remoteUrlRef = useRef<string | undefined>(undefined);
   const previewFrameRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLDivElement>(null);
   // Real rendered title height (card px; CSS transforms do not affect offsetHeight) for drag bounds.
   const [previewWidth, setPreviewWidth] = useState(540);
 
+  const dispatch = useCallback((action: CardAction) => {
+    if (!action.type.startsWith('GENERATE_') && abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+      requestSeq.current += 1;
+      rawDispatch({ type: 'GENERATE_ERROR' });
+      setStatus({ tone: 'info', text: 'Fetch cancelled to keep your latest edits.' });
+    }
+    rawDispatch(action);
+  }, []);
   const template = useMemo(() => getTemplate(card.templateId), [card.templateId]);
   const titleHeight = (): number =>
     Math.min(template.canvas.height, titleRef.current?.offsetHeight || card.fontSize * 1.3);
@@ -111,10 +124,38 @@ export default function PhotocardEditor() {
   const [photoSize, setPhotoSize] = useState({ width: 1920, height: 1080 });
   // A finished composition stays exportable after a failed or cancelled refetch.
   const needsUpload = template.requiresImage && card.image.kind !== 'local';
-  const canExport = card.loadStatus !== 'loading' && card.title.trim() !== '' && !needsUpload;
+  const canExport = card.loadStatus !== 'loading' && card.title.trim() !== '' && !needsUpload && !headlineOverflow;
   const scale = useMemo(() => previewScale(previewWidth, Number.POSITIVE_INFINITY, template.canvas), [previewWidth, template.canvas]);
   // Computed after mount so SSR and first client render agree (avoids hydration mismatch).
   const [clipboardSupported, setClipboardSupported] = useState(false);
+
+  useEffect(() => {
+    const node = titleRef.current;
+    if (!node) return;
+    const check = () => setHeadlineOverflow(!!card.title.trim() && !titleFits(node, card.titlePosition, template.titleRegion));
+    const observer = new ResizeObserver(check);
+    observer.observe(node);
+    check();
+    let cancelled = false;
+    void document.fonts.ready.then(() => { if (!cancelled) check(); });
+    return () => { cancelled = true; observer.disconnect(); };
+  }, [card.title, card.fontSize, card.titlePosition, card.language, template]);
+
+  const fitHeadline = () => {
+    const node = titleRef.current;
+    if (!node) return;
+    const position = { x: template.title.x, y: template.title.y };
+    const available = template.titleRegion.y + template.titleRegion.height - position.y;
+    const previous = node.style.fontSize;
+    let size = card.fontSize;
+    for (; size > 30; size--) {
+      node.style.fontSize = size + 'px';
+      if (node.offsetHeight <= available && node.scrollWidth <= node.clientWidth + 1) break;
+    }
+    node.style.fontSize = previous;
+    dispatch({ type: 'SET_TITLE_POSITION', position });
+    dispatch({ type: 'SET_FONT_SIZE', size });
+  };
 
   useEffect(() => {
     const node = previewFrameRef.current;
@@ -152,6 +193,7 @@ export default function PhotocardEditor() {
   useEffect(
     () => () => {
       if (localUrlRef.current) URL.revokeObjectURL(localUrlRef.current);
+      if (remoteUrlRef.current) URL.revokeObjectURL(remoteUrlRef.current);
       abortRef.current?.abort();
     },
     [],
@@ -191,11 +233,28 @@ export default function PhotocardEditor() {
         throw new Error(payload.error?.message ?? S.status.loadFailed);
       }
       const data = payload.data;
+      let nextRemote: string | undefined;
+      if (data.imageUrl) {
+        const imageResponse = await fetch(data.imageUrl, { signal: controller.signal });
+        if (!imageResponse.ok) throw new Error(S.status.exportPhoto);
+        const blob = await imageResponse.blob();
+        if (blob.size > 8 * 1024 * 1024) throw new Error(S.status.tooBig);
+        nextRemote = URL.createObjectURL(blob);
+        try { await decodeImage(nextRemote); }
+        catch { URL.revokeObjectURL(nextRemote); throw new Error(S.status.exportPhoto); }
+      }
+      if (seq !== requestSeq.current) {
+        if (nextRemote) URL.revokeObjectURL(nextRemote);
+        return;
+      }
+      abortRef.current = null;
+      if (remoteUrlRef.current) URL.revokeObjectURL(remoteUrlRef.current);
+      remoteUrlRef.current = nextRemote;
       if (localUrlRef.current) {
         URL.revokeObjectURL(localUrlRef.current);
         localUrlRef.current = undefined;
       }
-      const imageSrc = data.imageUrl ?? FALLBACK_IMAGE_SRC;
+      const imageSrc = nextRemote ?? FALLBACK_IMAGE_SRC;
       const imageKind = data.imageUrl ? ('remote' as const) : ('fallback' as const);
       setLastRemoteImage({ src: imageSrc, kind: imageKind });
       dispatch({
@@ -207,10 +266,10 @@ export default function PhotocardEditor() {
         imageSrc,
         imageKind,
       });
-      // Auto-size capped by the active template's title box.
+      // Start at the template default; Fit headline is an explicit user action.
       dispatch({
         type: 'SET_FONT_SIZE',
-        size: Math.min(titleFontSize(data.title), template.title.maxFontSize),
+        size: template.title.defaultFontSize,
       });
       if (data.imageNotice === 'signing-unconfigured') {
         announce('warning', S.status.readySigningOff);
@@ -227,12 +286,14 @@ export default function PhotocardEditor() {
         return;
       }
       dispatch({ type: 'GENERATE_ERROR' });
+      abortRef.current = null;
       announce('error', err instanceof Error ? err.message : S.status.loadFailed);
     }
-  }, [card.sourceUrl, template, announce]);
+  }, [card.sourceUrl, template, announce, dispatch]);
 
   const cancelGenerate = useCallback(() => {
     abortRef.current?.abort();
+    abortRef.current = null;
     requestSeq.current += 1;
     dispatch({ type: 'GENERATE_ERROR' });
     announce('info', S.status.cancelled);
@@ -270,7 +331,7 @@ export default function PhotocardEditor() {
     }
     dispatch({ type: 'RESTORE_REMOTE_IMAGE', src: lastRemoteImage.src, kind: lastRemoteImage.kind });
     announce('success', S.status.restored);
-  }, [lastRemoteImage, announce]);
+  }, [lastRemoteImage, announce, dispatch]);
 
   const fullReset = useCallback(() => {
     if (card.isDirty) {
@@ -284,11 +345,13 @@ export default function PhotocardEditor() {
     abortRef.current?.abort();
     requestSeq.current += 1;
     setLastRemoteImage(null);
+    if (remoteUrlRef.current) URL.revokeObjectURL(remoteUrlRef.current);
+    remoteUrlRef.current = undefined;
     setCustomCredit(false);
     setUrlError(null);
     dispatch({ type: 'FULL_RESET', date: todayBanglaDate(), templateId: template.id });
     announce('info', S.status.reset);
-  }, [card.isDirty, template.id, announce]);
+  }, [card.isDirty, template.id, announce, dispatch]);
 
   const nudge = useCallback(
     (layer: 'photo' | 'title' | 'qr', dx: number, dy: number) => {
@@ -318,7 +381,7 @@ export default function PhotocardEditor() {
         dispatch({ type: 'SET_QR_POSITION', position: next });
       }
     },
-    [card.imageScale, card.photoPosition, card.qrPosition, card.titlePosition, photoSize, template],
+    [card.imageScale, card.photoPosition, card.qrPosition, card.titlePosition, photoSize, template, dispatch],
   );
 
   const onLayerKeyDown = useCallback(
@@ -342,6 +405,7 @@ export default function PhotocardEditor() {
   );
 
   const exportBlob = useCallback(async () => {
+    if (titleRef.current && !titleFits(titleRef.current, card.titlePosition, template.titleRegion)) throw new Error('HEADLINE_OVERFLOW');
     const snapshot = {
       state: card,
       templateSrc: template.src,
@@ -349,7 +413,7 @@ export default function PhotocardEditor() {
       qrDataUrl: card.qrVisible ? qrDataUrl || null : null,
     };
     return defaultRenderer.render(snapshot);
-  }, [card, template.src, qrDataUrl]);
+  }, [card, template, qrDataUrl]);
 
   const download = useCallback(async () => {
     if (!canExport) return;
@@ -432,14 +496,15 @@ export default function PhotocardEditor() {
 
   // Keyboard shortcuts: G generate, D download, R reset, arrows nudge the selected layer.
   // Ignored while typing in a field, inside the template list, or with a modifier held.
-  const shortcutRef = useRef({ generate, download, fullReset, nudge, activeLayer, isArticle, canExport });
-  shortcutRef.current = { generate, download, fullReset, nudge, activeLayer, isArticle, canExport };
+  const shortcutRef = useRef({ generate, download, fullReset, nudge, activeLayer, isArticle, canExport, shortcutsEnabled, exporting });
+  shortcutRef.current = { generate, download, fullReset, nudge, activeLayer, isArticle, canExport, shortcutsEnabled, exporting };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
       const target = e.target as HTMLElement | null;
       if (target?.closest('input, textarea, select, [contenteditable="true"], [role="listbox"], [role="radiogroup"]')) return;
       const k = shortcutRef.current;
+      if (!k.shortcutsEnabled || k.exporting !== 'idle') return;
       const key = e.key.toLowerCase();
       if (key === 'g' && k.isArticle) void k.generate();
       else if (key === 'd' && k.canExport) void k.download();
@@ -477,7 +542,7 @@ export default function PhotocardEditor() {
                   ? S.header.state.ready
                   : S.header.state.needsHeadline}
           </p>
-          <button type="button" className="button ghost" onClick={fullReset} title={S.header.resetHint} aria-keyshortcuts="R">
+          <button type="button" className="button ghost" onClick={fullReset} disabled={exporting !== 'idle'} title={S.header.resetHint} aria-keyshortcuts="R">
             <Icon name="reset" size={18} />
             {S.header.reset}
           </button>
@@ -487,14 +552,14 @@ export default function PhotocardEditor() {
       <div className="workspace">
         <div className="controls" aria-label={S.sections.controls}>
           <section aria-labelledby="type-heading">
-            <fieldset>
+            <fieldset disabled={exporting !== 'idle'}>
               <SectionHead id="type-heading" step={1} title={S.sections.type.title} hint={S.sections.type.hint} />
               <TemplatePicker value={card.templateId} onChange={switchTemplate} />
             </fieldset>
           </section>
 
           <section aria-labelledby="content-heading">
-            <fieldset>
+            <fieldset disabled={exporting !== 'idle'}>
               <SectionHead id="content-heading" step={2} title={S.sections.content.title} hint={S.sections.content.hint} />
 
               {isArticle && (
@@ -567,7 +632,7 @@ export default function PhotocardEditor() {
 
               <label htmlFor="headline">{S.headline.label}</label>
               <textarea
-                id="headline" lang="bn"
+                id="headline" lang={card.language}
                 rows={3}
                 value={card.title}
                 placeholder={S.headline.placeholder}
@@ -577,7 +642,7 @@ export default function PhotocardEditor() {
               <p id="headline-stats" className="word-hint" aria-live="off">
                 {(() => {
                   const words = card.title.trim() ? card.title.trim().split(/\s+/u).length : 0;
-                  return S.headline.stats(words, titleFontSize(card.title));
+                  return S.headline.stats(words, card.fontSize);
                 })()}
               </p>
               <small id="headline-help">{template.highlightColor ? S.headline.helpHighlight : S.headline.helpPlain}</small>
@@ -588,7 +653,7 @@ export default function PhotocardEditor() {
                   id="pub-date" lang="bn"
                   type="text"
                   value={card.publicationDate}
-                  placeholder={todayBanglaDate()}
+                  placeholder="Dhaka date"
                   aria-describedby="pub-date-help"
                   onChange={(e) => dispatch({ type: 'SET_DATE', date: e.target.value })}
                 />
@@ -674,7 +739,7 @@ export default function PhotocardEditor() {
           </section>
 
           <section aria-labelledby="design-heading">
-            <fieldset>
+            <fieldset disabled={exporting !== 'idle'}>
               <SectionHead id="design-heading" step={3} title={S.sections.layout.title} hint={S.sections.layout.hint} />
 
               {template.photo && isArticle && (
@@ -732,44 +797,12 @@ export default function PhotocardEditor() {
                 />
               )}
 
-              <RangeField
-                id="font-size-range"
-                label={S.fontSize.label(card.fontSize)}
-                min={30}
-                max={120}
-                step={1}
-                value={card.fontSize}
-                display={`${card.fontSize}px`}
-                onChange={(size) => dispatch({ type: 'SET_FONT_SIZE', size })}
-              />
-              <div className="input-action size-row">
-                <label htmlFor="font-size-number" className="visually-hidden">
-                  {S.fontSize.value}
-                </label>
-                <input
-                  id="font-size-number"
-                  type="number"
-                  min={30}
-                  max={120}
-                  value={card.fontSize}
-                  onChange={(e) => dispatch({ type: 'SET_FONT_SIZE', size: clampFontSize(Number(e.target.value)) })}
-                />
-                <div className="size-presets" role="group" aria-label={S.fontSize.presets}>
-                  {[...new Set([...TITLE_SIZES, template.title.defaultFontSize])]
-                    .sort((x, y) => x - y)
-                    .map((size) => (
-                      <button
-                        key={size}
-                        type="button"
-                        className="chip"
-                        aria-pressed={card.fontSize === size}
-                        onClick={() => dispatch({ type: 'SET_FONT_SIZE', size })}
-                      >
-                        {size}
-                      </button>
-                    ))}
-                </div>
-              </div>
+              <label htmlFor="font-size-select">Headline size</label>
+              <select id="font-size-select" value={card.fontSize} onChange={(e) => dispatch({ type: 'SET_FONT_SIZE', size: Number(e.target.value) })}>
+                {TITLE_SIZES.map((size) => <option key={size} value={size}>{size}px</option>)}
+              </select>
+              <button type="button" className="button secondary" onClick={fitHeadline}>Fit headline</button>
+              {headlineOverflow && <p className="field-error" role="alert">Headline exceeds its safe area. Fit it, shorten it, or move it back before export.</p>}
 
               <NudgePad
                 layers={layers}
@@ -801,7 +834,7 @@ export default function PhotocardEditor() {
           </section>
 
           <section aria-labelledby="export-heading" aria-busy={exporting !== 'idle'}>
-            <fieldset>
+            <fieldset disabled={exporting !== 'idle'}>
               <SectionHead id="export-heading" step={4} title={S.sections.export.title} hint={S.sections.export.hint} />
               <div className="export-actions">
                 <button
@@ -882,7 +915,7 @@ export default function PhotocardEditor() {
                 )}
                 <img className="card-template" src={template.src} alt="" draggable={false} />
                 {/* A render that straddles Dhaka midnight may differ by a day; the client value wins. */}
-                <div className="card-date" style={dateStyle(template) as React.CSSProperties} suppressHydrationWarning>
+                <div className="card-date" style={dateStyle(template) as React.CSSProperties} >
                   {card.publicationDate}
                 </div>
                 {credit && (
@@ -952,6 +985,7 @@ export default function PhotocardEditor() {
           <p className="dimensions">
             <span className="badge">{S.export.previewScale(EXPORT_WIDTH, EXPORT_HEIGHT, (scale / EXPORT_SCALE).toFixed(2))}</span>
           </p>
+          <label className="shortcut-toggle"><input type="checkbox" checked={shortcutsEnabled} onChange={(e) => setShortcutsEnabled(e.target.checked)} /> Enable keyboard shortcuts</label>
           <p className="shortcuts" aria-label={S.shortcuts.label}>
             {isArticle && (
               <span>

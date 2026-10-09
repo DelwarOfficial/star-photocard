@@ -245,7 +245,7 @@ describe('reducer', () => {
     const today = todayBanglaDate();
     expect(initialCardState.publicationDate).toBe(today);
     expect(createCardState().publicationDate).toBe(today);
-    expect(todayBanglaDate(new Date('2026-10-09T06:00:00Z'))).toBe('০৯ অক্টোবর ২০২৬');
+    expect(todayBanglaDate(new Date('2026-10-09T06:00:00Z'))).toBe('৯ অক্টোবর ২০২৬');
     // Late UTC evening is already the next day in Dhaka (UTC+6).
     expect(todayBanglaDate(new Date('2026-10-09T19:00:00Z'))).toBe('১০ অক্টোবর ২০২৬');
     const edited = cardReducer(initialCardState, { type: 'SET_DATE', date: 'custom' });
@@ -268,6 +268,10 @@ describe('reducer', () => {
   it('pre-fills the pill with the article category only when the user has not set one', () => {
     const success = { type: 'GENERATE_SUCCESS', articleUrl: 'https://starnews.com.bd/a', title: 't', language: 'bn', imageSrc: '/p.jpg', imageKind: 'remote', category: 'রংপুর' } as const;
     expect(cardReducer(initialCardState, success).photoTag).toBe('রংপুর');
+    const generated = cardReducer(initialCardState, success);
+    expect(cardReducer(generated, { ...success, category: 'খেলা' }).photoTag).toBe('খেলা');
+    const cleared = cardReducer(generated, { type: 'SET_PHOTO_TAG', tag: '' });
+    expect(cardReducer(cleared, success).photoTag).toBe('');
     const userSet = cardReducer(initialCardState, { type: 'SET_PHOTO_TAG', tag: 'খেলা' });
     expect(cardReducer(userSet, success).photoTag).toBe('খেলা');
     expect(cardReducer(initialCardState, { ...success, category: null }).photoTag).toBe('');

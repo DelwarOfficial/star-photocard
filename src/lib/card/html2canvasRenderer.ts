@@ -1,6 +1,7 @@
 import html2canvas from 'html2canvas';
 import { EXPORT_HEIGHT, EXPORT_WIDTH, getTemplate } from '../../config/templates';
 import { photoGeometry } from './geometry';
+import { titleFits } from './titleBounds';
 import { tokenizeTitle } from './highlightTitle';
 import { hasTag } from './photoTag';
 import { applyStyle, CARD_TEXT_WEIGHT, creditStyle, dateStyle, highlightColor, pillStyle, qrStyle, titleStyle } from './layerStyles';
@@ -8,7 +9,7 @@ import { decodeImage, waitForFonts, type CardRenderer, type ExportSnapshot } fro
 
 /**
  * html2canvas renderer behind the CardRenderer interface.
- * Uses the shared cover-geometry function instead of object-fit + transforms
+ * Uses the shared contain-geometry function instead of object-fit + transforms
  * so preview, bounds and export agree. Animated GIF input exports its decoded
  * first frame (browser decoding behavior); documented in README.
  *
@@ -64,7 +65,7 @@ export class Html2CanvasRenderer implements CardRenderer {
       card.style.cssText = `position:relative;width:${canvasWidth}px;height:${canvasHeight}px;overflow:hidden;background:#fff;font-family:${fontFamily},serif;`;
       container.appendChild(card);
 
-      // Photo layer with explicit cover geometry (cards without a photo window skip it).
+      // Photo layer with explicit contain geometry (cards without a photo window skip it).
       const photoViewport = template.photo;
       if (photoViewport && photoImg) {
         const drawn = photoGeometry(
@@ -139,6 +140,7 @@ export class Html2CanvasRenderer implements CardRenderer {
       }
 
       document.body.appendChild(container);
+      if (!titleFits(title, snapshot.state.titlePosition, template.titleRegion)) throw new Error('HEADLINE_OVERFLOW');
       const canvas = await html2canvas(card, {
         backgroundColor: '#ffffff',
         // Render the 1080-wide layout at 1600 / 1080: vector text re-rasterised, images sampled at full size.

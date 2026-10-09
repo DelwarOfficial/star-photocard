@@ -72,7 +72,7 @@ export function detectLanguage(html: string, url: URL): Language {
   const locale = firstMetaContent(html, ['og:locale'])?.toLowerCase() ?? '';
   if (locale.startsWith('en')) return 'en';
   if (locale.startsWith('bn')) return 'bn';
-  const htmlLang = html.match(/<html[^>]*\blang=["']([^"']*)["']/iu)?.[1]?.toLowerCase() ?? '';
+  const htmlLang = attr(html.match(/<html\b(?:"[^"]*"|'[^']*'|[^'">])*>/iu)?.[0] ?? '', 'lang')?.toLowerCase() ?? '';
   if (htmlLang.startsWith('en')) return 'en';
   if (htmlLang.startsWith('bn')) return 'bn';
   // Script heuristic: presence of Bengali block characters.
@@ -103,7 +103,7 @@ function extractDate(html: string, now: Date): { date: Date; source: DateSource;
 }
 
 function firstTimeDatetime(html: string): string | null {
-  const match = html.match(/<time[^>]*\bdatetime=["']([^"']+)["'][^>]*>/iu)?.[1];
+  const match = attr(html.match(/<time\b(?:"[^"]*"|'[^']*'|[^'">])*>/iu)?.[0] ?? '', 'datetime');
   return match ? decodeEntities(match).trim() : null;
 }
 
@@ -152,7 +152,25 @@ export function extractCategory(html: string, pageUrl: URL): string | null {
   if (meta) return meta;
   const jsonLd = cleanCategory(firstJsonLdArticleSection(html));
   if (jsonLd) return jsonLd;
-  return menuCategory(html, pageUrl);
+  return menuCategory(html, pageUrl) ?? sectionLinkCategory(html, pageUrl);
+}
+
+/** Flat top-level links (such as Politics) are not wrapped in mobile-menu-parent. */
+function sectionLinkCategory(html: string, pageUrl: URL): string | null {
+  const section = firstPathSegment(pageUrl.pathname);
+  if (!section) return null;
+  for (const match of html.matchAll(/(<a\b(?:"[^"]*"|'[^']*'|[^'">])*>)([\s\S]*?)<\/a\s*>/giu)) {
+    const href = attr(match[1] ?? '', 'href');
+    if (!href) continue;
+    try {
+      const link = new URL(decodeEntities(href), pageUrl);
+      if (link.protocol !== 'https:' || !isStarNewsHost(link.hostname)) continue;
+      if (!/^\/[^/]+\.html?$/iu.test(link.pathname) || firstPathSegment(link.pathname) !== section) continue;
+      const category = cleanCategory(match[2]);
+      if (category) return category;
+    } catch { /* Ignore malformed navigation links. */ }
+  }
+  return null;
 }
 
 function cleanCategory(raw: string | null | undefined): string | null {
@@ -282,19 +300,12 @@ export function getBestSrcsetUrl(srcset: string): string {
 
 // --- Low-level HTML helpers (inert regex parsing; never executes scripts) ---
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 function allMetaContents(html: string, key: string): string[] {
-  const out: string[] = [];
-  const pattern = new RegExp(`<meta\\s+[^>]*?(?:property|name)=["']${escapeRegExp(key)}["'][^>]*?>`, 'giu');
-  let match: RegExpExecArray | null;
-  while ((match = pattern.exec(html)) !== null) {
-    const content = match[0].match(/content=["']([^"']*)["']/iu)?.[1];
-    if (content) out.push(decodeEntities(content).trim());
-  }
-  return out;
+  return [...html.matchAll(/<meta\b(?:"[^"]*"|'[^']*'|[^'">])*>/giu)]
+    .filter(([tag]) => (attr(tag, 'property') ?? attr(tag, 'name'))?.toLowerCase() === key)
+    .map(([tag]) => attr(tag, 'content'))
+    .filter((value): value is string => value !== null && value.trim() !== '')
+    .map((value) => decodeEntities(value).trim());
 }
 
 function firstMetaContent(html: string, keys: string[]): string | null {
@@ -306,12 +317,17 @@ function firstMetaContent(html: string, keys: string[]): string | null {
 }
 
 function attr(tag: string, name: string): string | null {
-  return tag.match(new RegExp(`\\b${name}=["']([^"']*)["']`, 'iu'))?.[1] ?? null;
+  // Consume whole quoted values; opposite quotes and attribute-like text are content.
+  const attributes = /(?:^|\s)([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gu;
+  for (const match of tag.matchAll(attributes)) {
+    if (match[1]?.toLowerCase() === name.toLowerCase()) return match[2] ?? match[3] ?? match[4] ?? '';
+  }
+  return null;
 }
 
 function tagsWithAttr(html: string, tagName: string, attrName: string, test: (value: string) => boolean): string[] {
   const out: string[] = [];
-  const pattern = new RegExp(`<${tagName}\\b[^>]*>`, 'giu');
+  const pattern = new RegExp(`<${tagName}\\b(?:"[^"]*"|'[^']*'|[^'">])*>`, 'giu');
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(html)) !== null) {
     const value = attr(match[0], attrName);
@@ -341,13 +357,13 @@ function extractNextDataImage(html: string): string | null {
 
 function extractImageSrcLinks(html: string): string[] {
   const out: string[] = [];
-  const pattern = /<link[^>]*>/giu;
+  const pattern = /<link\b(?:"[^"]*"|'[^']*'|[^'">])*>/giu;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(html)) !== null) {
     const tag = match[0];
-    const rel = tag.match(/\brel=["']([^"']*)["']/iu)?.[1] ?? '';
+    const rel = attr(tag, 'rel') ?? '';
     if (!rel.split(/\s+/).map((s) => s.toLowerCase()).includes('image_src')) continue;
-    const href = tag.match(/\bhref=["']([^"']*)["']/iu)?.[1];
+    const href = attr(tag, 'href');
     if (href) out.push(href);
   }
   return out;
@@ -361,20 +377,20 @@ function extractArticleMarkupImages(html: string): string[] {
     /<[^>]*\bclass=["'][^"']*\bpost_template-0\b[^"']*["'][^>]*>([\s\S]*?)<\/[^>]+>/iu,
   )?.[1];
   const scopes = [overlay, postSection].filter(Boolean) as string[];
-  const imgPattern = /<img\b[^>]*>/giu;
+  const imgPattern = /<img\b(?:"[^"]*"|'[^']*'|[^'">])*>/giu;
   for (const scope of scopes) {
-    let firstOnly = scope === postSection;
+    const firstOnly = scope === postSection;
     let match: RegExpExecArray | null;
     imgPattern.lastIndex = 0;
     while ((match = imgPattern.exec(scope)) !== null) {
       const tag = match[0];
       // For post_template-0 legacy takes //img[1] (first img); overlay takes all.
       if (firstOnly && out.length > 0) break;
-      for (const attr of ['src', 'data-src', 'data-lazy-src', 'data-original']) {
-        const value = tag.match(new RegExp(`\\b${attr}=["']([^"']*)["']`, 'iu'))?.[1];
+      for (const attribute of ['src', 'data-src', 'data-lazy-src', 'data-original']) {
+        const value = attr(tag, attribute);
         if (value) out.push(value);
       }
-      const srcset = tag.match(/\bsrcset=["']([^"']*)["']/iu)?.[1];
+      const srcset = attr(tag, 'srcset');
       if (srcset) {
         const best = getBestSrcsetUrl(srcset);
         if (best) out.push(best);

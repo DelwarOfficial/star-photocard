@@ -32,12 +32,10 @@ export function TemplatePicker(props: { value: string; onChange: (id: string) =>
     document.addEventListener('pointerdown', onPointer);
     return () => document.removeEventListener('pointerdown', onPointer);
     // selectedIndex only matters at open time
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   useEffect(() => {
     if (open) document.getElementById(optionId(active))?.scrollIntoView({ block: 'nearest' });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, open]);
 
   const choose = (i: number) => {

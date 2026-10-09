@@ -44,6 +44,14 @@ describe('Star News URL policy', () => {
 });
 
 describe('article extraction', () => {
+  it.each([
+    [`<meta property="og:title" content="Editor's choice">`, "Editor's choice"],
+    [`<meta content='He said "go now" today' property='og:title'>`, 'He said "go now" today'],
+    [`<meta property="og:title" content="He said &quot;go&quot; &amp; left">`, 'He said "go" & left'],
+    [`<meta property="og:title" content="A > B, Editor's choice">`, "A > B, Editor's choice"],
+  ])('preserves quotation delimiters in %s', (html, expected) => {
+    expect(extractArticle(html, new URL('https://starnews.com.bd/a')).title).toBe(expected);
+  });
   it('extracts and formats an English article', () => {
     const result = extractArticle(
       '<meta property="og:title" content="Headline | Star News"><meta property="article:published_time" content="2026-09-04T00:00:00Z">',
@@ -322,4 +330,9 @@ describe('category, canonical URL and image priority', () => {
       'https://starnews.com.bd/6.jpg',
     ]);
   });
+});
+
+it("extracts flat live-site section links without taking a related article title", () => {
+ const url = new URL("https://starnews.com.bd/politics/25809/example.html");
+ expect(extractCategory(`<a href="/politics/9/other.html">Other headline</a><a href="/politics.html">Politics</a>`, url)).toBe("Politics");
 });

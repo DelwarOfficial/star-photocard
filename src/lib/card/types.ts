@@ -13,6 +13,7 @@ export type CardState = Readonly<{
   templateId: string;
   image: Readonly<{ kind: ImageKind; src: string }>;
   photoTag: string;
+  categoryEdited: boolean;
   /** Photo-credit tag text; empty = no tag. */
   photoCredit: string;
   fontSize: number;
@@ -51,6 +52,7 @@ const baseCardState: CardState = {
   templateId: defaultTemplate.id,
   image: { kind: 'fallback', src: FALLBACK_IMAGE_SRC },
   photoTag: '',
+  categoryEdited: false,
   photoCredit: '',
   imageScale: 1,
   photoPosition: { x: 0, y: 0 },

@@ -1,3 +1,5 @@
+> Current implementation (2026-10-09): portrait 1080x1350 layout, 1600x2000 PNG, self-hosted StarNews SemiBold 600, today's editable Asia/Dhaka Bengali date (auto-filled after hydration), contain-and-center photos. Missing/rejected article images use the bundled demo; approved images are retained as browser Blob URLs. README and src/config/templates.ts are authoritative. Older square/Black/Bold/publication-date/cover specifications below are historical and superseded.
+
 # Template Reposition Prompt — New Star News Artwork
 
 > **Executed 2026-09-14** (registry rewritten, square canvas, Chromium

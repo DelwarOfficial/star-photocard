@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { z } from 'zod';
+import { enforceRateLimit } from '../../lib/security/requestLimits';
 import { isStarNewsHost } from '../../lib/article/normalizeArticleUrl';
 import { fetchImageBytes } from '../../lib/security/boundedFetch';
 import { hashedImageCacheKey, matchCache, putCache, ttlSeconds } from '../../lib/security/cacheKey';
@@ -23,6 +24,13 @@ export const GET: APIRoute = async ({ request }) => {
   } catch {
     workerEnv = {};
   }
+  return handleImage(request, workerEnv);
+};
+
+export async function handleImage(request: Request, workerEnv: Record<string, unknown>): Promise<Response> {
+  const limited = await enforceRateLimit(workerEnv.IMAGE_RATE_LIMITER,
+    'image:' + (request.headers.get('cf-connecting-ip') ?? 'unknown'), crypto.randomUUID());
+  if (limited) return limited;
   const secret = typeof workerEnv.IMAGE_TOKEN_SECRET === 'string' ? workerEnv.IMAGE_TOKEN_SECRET : '';
   if (!secret) return failure(500, 'Image service is not configured.');
 
@@ -50,7 +58,7 @@ export const GET: APIRoute = async ({ request }) => {
   if (!isStarNewsHost(imageUrl.hostname)) return failure(403, 'Invalid image reference.');
 
   try {
-    const cacheKey = await hashedImageCacheKey(imageUrl.href);
+    const cacheKey = await hashedImageCacheKey(imageUrl.href, new URL(request.url).origin);
     let cache: Cache | undefined;
     try {
       cache = await caches.open('star-photocard-image-v1');
@@ -74,4 +82,4 @@ export const GET: APIRoute = async ({ request }) => {
   } catch {
     return failure(502, 'The image could not be loaded.');
   }
-};
+}

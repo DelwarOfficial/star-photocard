@@ -47,6 +47,7 @@ export type TemplateDefinition = Readonly<{
    * placed in a corner clear of the headline, pill and footer. null when there is no photo.
    */
   photoCredit: Readonly<Point & { fontSize: number }> | null;
+  titleRegion: Rect;
   title: Readonly<Point & { width: number; defaultFontSize: number; maxFontSize: number }>;
   titleColor: string;
   titleShadow: boolean;
@@ -113,6 +114,7 @@ export const templates: readonly TemplateDefinition[] = [
     photoTag: pillAt(1028),
     // Bottom-left of the photo (0–964).
     photoCredit: creditAbove(964),
+    titleRegion: rect(160, 1120, 1280, 540),
     title: title(200, 1158, 1200, 98),
     titleColor: WHITE,
     titleShadow: false,
@@ -136,6 +138,7 @@ export const templates: readonly TemplateDefinition[] = [
     photoTag: pillAt(141),
     // Bottom-left of the photo (723–1689).
     photoCredit: creditAbove(1689),
+    titleRegion: rect(160, 235, 1280, 445),
     title: title(200, 271, 1200, 98),
     titleColor: WHITE,
     titleShadow: false,
@@ -159,6 +162,7 @@ export const templates: readonly TemplateDefinition[] = [
     photoTag: null,
     // Headline is at the top; credit sits bottom-left, above the logo/meta footer.
     photoCredit: creditAt(32, 1690),
+    titleRegion: rect(80, 80, 1440, 1000),
     title: title(100, 124, 1400, 101),
     titleColor: WHITE,
     titleShadow: true,
@@ -182,6 +186,7 @@ export const templates: readonly TemplateDefinition[] = [
     photoTag: null,
     // Headline and footer fill the bottom; credit goes top-left.
     photoCredit: creditAt(32, 32),
+    titleRegion: rect(80, 1320, 1440, 410),
     title: title(100, 1413, 1400, 101),
     titleColor: WHITE,
     titleShadow: true,
@@ -206,6 +211,7 @@ export const templates: readonly TemplateDefinition[] = [
     photoTag: null,
     // Bottom-left of the photo (0–1255), clear of the centred "সদ্য প্রাপ্ত" pill.
     photoCredit: creditAbove(1255),
+    titleRegion: rect(80, 1330, 1440, 410),
     title: title(100, 1374, 1400, 101),
     titleColor: WHITE,
     titleShadow: false,
@@ -229,6 +235,7 @@ export const templates: readonly TemplateDefinition[] = [
     dateColor: BLACK,
     photoTag: null,
     photoCredit: null,
+    titleRegion: rect(120, 330, 1360, 1300),
     title: title(160, 393, 1280, 137),
     titleColor: BLACK,
     titleShadow: false,

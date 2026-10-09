@@ -65,6 +65,5 @@ export function parseArticleDate(input: unknown): Date | null {
 /** Today's date in Dhaka, Bengali numerals + month name — the date on every card (editable). */
 export function todayBanglaDate(now = new Date()): string {
   const { day, month, year } = englishParts(now);
-  // Two-digit day ("০৯ অক্টোবর ২০২৬"), the card's date style.
-  return `${toBanglaDigits(day.padStart(2, '0'))} ${BANGLA_MONTHS[month] ?? month} ${toBanglaDigits(year)}`;
+  return `${toBanglaDigits(day)} ${BANGLA_MONTHS[month] ?? month} ${toBanglaDigits(year)}`;
 }

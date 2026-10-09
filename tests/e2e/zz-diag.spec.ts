@@ -1,17 +1,19 @@
-import { test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { todayBanglaDate } from '../../src/lib/text/dates';
 
-test('ssr vs client text', async ({ page, request }) => {
+test('stable SSR date hydrates cleanly and the declared favicon loads', async ({ page, request }) => {
   const html = await (await request.get('/')).text();
-  const grab = (re: RegExp) => html.match(re)?.[1] ?? '(none)';
-  console.log('SSR card-date   :', JSON.stringify(grab(/class="card-date"[^>]*>([^<]*)</)));
-  console.log('SSR date value  :', JSON.stringify(grab(/id="pub-date"[^>]*value="([^"]*)"/)));
-  console.log('SSR placeholder :', JSON.stringify(grab(/id="pub-date"[^>]*placeholder="([^"]*)"/)));
+  expect(html.match(/id="pub-date"[^>]*value="([^"]*)"/)?.[1]).toBe('');
+  expect(html).toContain('placeholder="Dhaka date"');
   const errors: string[] = [];
-  page.on('pageerror', (e) => errors.push(e.message.slice(0, 160)));
+  page.on('pageerror', e => errors.push(e.message));
+  page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+  page.on('response', r => { if (r.status() === 404) errors.push(r.url()); });
   await page.goto('/');
   await page.locator('astro-island:not([ssr])').waitFor({ state: 'attached' });
-  console.log('CSR card-date   :', JSON.stringify(await page.locator('.card-date').textContent()));
-  console.log('CSR date value  :', JSON.stringify(await page.locator('#pub-date').inputValue()));
-  console.log('client now      :', await page.evaluate(() => new Date().toString()));
-  console.log('errors          :', JSON.stringify(errors));
+  await expect(page.getByLabel('Date', { exact: true })).toHaveValue(todayBanglaDate());
+  const favicon = await page.locator('link[rel="icon"]').getAttribute('href');
+  expect(favicon).toBe('/photos/Star-news-file-image.webp');
+  expect((await request.get(favicon!)).status()).toBe(200);
+  expect(errors).toEqual([]);
 });

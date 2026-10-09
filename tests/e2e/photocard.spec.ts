@@ -372,6 +372,7 @@ test.describe('photocard generator', () => {
     // Typing "g" in a field must not trigger Generate.
     await page.getByLabel('Headline', { exact: true }).press('g');
     await expect(page.getByRole('status')).not.toContainText('Card ready');
+    await page.getByLabel('Enable keyboard shortcuts').check();
     await page.locator('h1').click(); // move focus out of the fields
     await page.keyboard.press('g');
     await expect(page.getByRole('status')).toContainText('Card ready');
@@ -466,14 +467,16 @@ test.describe('photocard generator', () => {
     await expect(pickerButton(page)).toContainText('Breaking News');
   });
 
-  test('export fails loudly instead of swapping in the stock photo', async ({ page }) => {
+  test('an approved image download failure preserves the card and blocks empty export', async ({ page }) => {
     await page.route('**/api/image**', (route) =>
       route.fulfill({ status: 403, contentType: 'application/json', body: '{"error":{"code":"IMAGE_ERROR"}}' }),
     );
     await mockArticle(page, { imageUrl: '/api/image?token=expired' });
-    await generate(page);
-    await page.getByRole('button', { name: 'Download PNG' }).click();
+    await open(page);
+    await page.getByLabel('Star News article link').fill(ARTICLE_URL);
+    await page.getByRole('button', { name: 'Generate', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('couldn’t load the card photo');
+    await expect(page.getByRole('button', { name: 'Download PNG' })).toBeDisabled();
   });
 
   test('every template renders its artwork and exports at full size', async ({ page }) => {
@@ -536,6 +539,80 @@ test.describe('photocard generator', () => {
       // The card must not widen the layout (mobile browsers would zoom the whole tool out).
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(0);
+    }
+  });
+
+  test('shortcuts are opt-in and font sizes update through the dropdown', async ({ page }) => {
+    await open(page);
+    await page.getByLabel('Headline', { exact: true }).fill('A short headline');
+    await page.locator('h1').click();
+    await page.keyboard.press('g');
+    await expect(page.getByRole('status')).not.toContainText('Fetching');
+    await page.getByLabel('Headline size', { exact: true }).selectOption('52');
+    await expect(page.locator('.card-title')).toHaveCSS('font-size', '52px');
+    await expect(page.locator('.card-title')).toHaveCSS('font-weight', '600');
+  });
+  test('successive articles replace automatic categories and preserve manual overrides', async ({ page }) => {
+    let category = 'Sports';
+    await page.route('**/api/article', route => route.fulfill({ json: { data: { canonicalUrl: ARTICLE_URL, title: 'Short headline', language: 'bn', category } } }));
+    await generate(page);
+    category = 'Politics';
+    await page.getByRole('button', { name: 'Generate', exact: true }).click();
+    await expect(page.locator('.card-pill')).toHaveText('Politics');
+    await page.getByLabel('Category (yellow label)').fill('Manual');
+    category = 'Economy';
+    await page.getByRole('button', { name: 'Generate', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Card ready');
+    await expect(page.locator('.card-pill')).toHaveText('Manual');
+  });
+  test('edits during fetch cancel the old composition request', async ({ page }) => {
+    await page.route('**/api/article', async route => {
+      await new Promise(resolve => setTimeout(resolve, 400));
+      await route.fulfill({ json: { data: { canonicalUrl: ARTICLE_URL, title: 'Old server headline', language: 'bn' } } }).catch(() => {});
+    });
+    await open(page);
+    await page.getByLabel('Star News article link').fill(ARTICLE_URL);
+    await page.getByRole('button', { name: 'Generate', exact: true }).click();
+    await page.getByLabel('Headline', { exact: true }).fill('Keep my edit');
+    await expect(page.getByRole('status')).toContainText('latest edits');
+    await page.waitForTimeout(600);
+    await expect(page.getByLabel('Headline', { exact: true })).toHaveValue('Keep my edit');
+    await page.getByRole('button', { name: 'Generate', exact: true }).click();
+    await page.locator('input[type="file"]').setInputFiles(UPLOAD_PHOTO);
+    const uploadedSrc = await page.locator('.photo').getAttribute('src');
+    await page.waitForTimeout(600);
+    await expect(page.locator('.photo')).toHaveAttribute('src', uploadedSrc!);
+    await expect(page.getByLabel('Headline', { exact: true })).toHaveValue('Keep my edit');
+    await page.getByRole('button', { name: 'Generate', exact: true }).click();
+    await pickTemplate(page, /Breaking News/);
+    await page.waitForTimeout(600);
+    await expect(page.getByLabel('Headline', { exact: true })).toHaveValue('Keep my edit');
+  });
+  test('retained article image exports after its signed endpoint expires', async ({ page }) => {
+    let calls = 0;
+    const bytes = await readFile(UPLOAD_PHOTO);
+    await page.route('**/api/image**', route => { calls++; return calls === 1 ? route.fulfill({ contentType: 'image/webp', body: bytes }) : route.fulfill({ status: 403 }); });
+    await mockArticle(page, { imageUrl: '/api/image?token=short-lived' });
+    await generate(page);
+    await expect(page.locator('.photo')).toHaveAttribute('src', /^blob:/);
+    await page.getByLabel('Headline', { exact: true }).fill('Still editable');
+    expect(await downloadPng(page)).toMatchObject({ width: CARD_W, height: CARD_H });
+    expect(calls).toBe(1);
+  });
+  test('overflow blocks export and Fit headline resolves recoverable overflow', async ({ page }) => {
+    await mockArticle(page, {});
+    await generate(page);
+    for (const name of [/Photo on top/, /Photo at bottom/, /Full photo, headline on top/, /Full photo, headline at bottom/, /Just In/, /Breaking News/]) {
+      await pickTemplate(page, name);
+      if (await page.getByLabel(/^Photo \(required/).count()) await page.getByLabel(/^Photo \(required/).setInputFiles(UPLOAD_PHOTO);
+      await page.getByLabel('Headline', { exact: true }).fill(Array(30).fill('বাংলা headline').join('\n'));
+      await expect(page.getByRole('button', { name: 'Download PNG' })).toBeDisabled();
+      await expect(page.getByRole('alert')).toContainText('safe area');
+      await page.getByLabel('Headline', { exact: true }).fill('বাংলা headline one two three four five six seven eight');
+      await page.getByLabel('Headline size', { exact: true }).selectOption('120');
+      await page.getByRole('button', { name: 'Fit headline', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'Download PNG' })).toBeEnabled();
+      expect(await downloadPng(page)).toMatchObject({ width: CARD_W, height: CARD_H });
     }
   });
 });

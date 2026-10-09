@@ -3,14 +3,32 @@
   "name": "star-news-photocard",
   "main": "@astrojs/cloudflare/entrypoints/server",
   "compatibility_date": "2026-09-04",
-  "compatibility_flags": ["nodejs_compat"],
-  "assets": { "binding": "ASSETS", "directory": "./dist" },
-  "observability": { "enabled": true },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./dist"
+  },
+  "observability": {
+    "enabled": true
+  },
   "ratelimits": [
     {
       "name": "ARTICLE_RATE_LIMITER",
       "namespace_id": "1001",
-      "simple": { "limit": 10, "period": 60 }
+      "simple": {
+        "limit": 10,
+        "period": 60
+      }
+    },
+    {
+      "name": "IMAGE_RATE_LIMITER",
+      "namespace_id": "2001",
+      "simple": {
+        "limit": 60,
+        "period": 60
+      }
     }
   ],
   "vars": {
@@ -28,7 +46,18 @@
         {
           "name": "ARTICLE_RATE_LIMITER",
           "namespace_id": "1002",
-          "simple": { "limit": 10, "period": 60 }
+          "simple": {
+            "limit": 10,
+            "period": 60
+          }
+        },
+        {
+          "name": "IMAGE_RATE_LIMITER",
+          "namespace_id": "2002",
+          "simple": {
+            "limit": 60,
+            "period": 60
+          }
         }
       ]
     },
@@ -42,7 +71,18 @@
         {
           "name": "ARTICLE_RATE_LIMITER",
           "namespace_id": "1003",
-          "simple": { "limit": 10, "period": 60 }
+          "simple": {
+            "limit": 10,
+            "period": 60
+          }
+        },
+        {
+          "name": "IMAGE_RATE_LIMITER",
+          "namespace_id": "2003",
+          "simple": {
+            "limit": 60,
+            "period": 60
+          }
         }
       ]
     }

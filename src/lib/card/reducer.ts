@@ -18,6 +18,7 @@ export type CardAction =
   | Readonly<{ type: 'GENERATE_ERROR' }>
   | Readonly<{ type: 'SET_TITLE'; title: string }>
   | Readonly<{ type: 'SET_DATE'; date: string }>
+  | Readonly<{ type: 'INITIALIZE_DATE'; date: string }>
   | Readonly<{ type: 'SET_PHOTO_TAG'; tag: string }>
   | Readonly<{ type: 'SET_PHOTO_CREDIT'; credit: string }>
   | Readonly<{ type: 'SET_FONT_SIZE'; size: number }>
@@ -41,7 +42,7 @@ export function clampFontSize(size: number): number {
   return Math.min(120, Math.max(30, Math.round(size)));
 }
 
-/** Photo zoom bounds: 1 = cover the window exactly; 3 = triple. */
+/** Photo zoom bounds: 1 = contain the whole photo; 3 = triple. */
 export const ZOOM_MIN = 1;
 export const ZOOM_MAX = 3;
 export const ZOOM_STEP = 0.1;
@@ -63,7 +64,7 @@ export function cardReducer(state: CardState, action: CardAction): CardState {
       return {
         ...state,
         articleUrl: action.articleUrl,
-        photoTag: state.photoTag || normalizePhotoTag(action.category ?? ''),
+        photoTag: state.categoryEdited ? state.photoTag : normalizePhotoTag(action.category ?? ''),
         title: action.title,
         // The card date is always today's (or the user's edit); the article date is not used.
         language: action.language,
@@ -79,10 +80,12 @@ export function cardReducer(state: CardState, action: CardAction): CardState {
       return { ...state, title: action.title, isDirty: true };
     case 'SET_DATE':
       return { ...state, publicationDate: action.date, isDirty: true };
+    case 'INITIALIZE_DATE':
+      return { ...state, publicationDate: action.date };
     case 'SET_PHOTO_CREDIT':
       return { ...state, photoCredit: limitTagInput(action.credit), isDirty: true };
     case 'SET_PHOTO_TAG':
-      return { ...state, photoTag: limitTagInput(action.tag), isDirty: true };
+      return { ...state, photoTag: limitTagInput(action.tag), categoryEdited: true, isDirty: true };
     case 'SET_FONT_SIZE':
       return { ...state, fontSize: clampFontSize(action.size), isDirty: true };
     case 'SET_IMAGE_SCALE':

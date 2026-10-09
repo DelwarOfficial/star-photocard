@@ -87,7 +87,7 @@ export const S = {
   headline: {
     label: 'Headline',
     placeholder: 'Type the headline (in Bengali)',
-    stats: (words: number, size: number) => `${words} ${words === 1 ? 'word' : 'words'} · auto size ${size}px`,
+    stats: (words: number, size: number) => `${words} ${words === 1 ? 'word' : 'words'} · headline size ${size}px`,
     helpHighlight:
       'Wrap words in *asterisks* to make them yellow. If you don’t, part of the headline is highlighted for you. Line breaks are kept.',
     helpPlain: 'This card doesn’t use a highlight colour. Line breaks are kept.',
