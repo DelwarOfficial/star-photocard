@@ -1,5 +1,6 @@
 import { type Language } from '../../config/templates';
 import { formatDhakaDate, parseArticleDate } from '../text/dates';
+import { isStarNewsHost } from './normalizeArticleUrl';
 
 export type DateSource = 'json-ld' | 'meta' | 'time' | 'fallback-now';
 
@@ -10,6 +11,10 @@ export type ArticleData = {
   dateSource: DateSource;
   language: Language;
   imageCandidates: string[];
+  /** News category (e.g. "রংপুর"); null when none can be found reliably. */
+  category: string | null;
+  /** Canonical article URL; null when the page declares no usable one. */
+  canonicalUrl: string | null;
 };
 
 const ARTICLE_TYPES = new Set(['article', 'newsarticle', 'reportagenewsarticle', 'blogposting']);
@@ -29,6 +34,8 @@ export function extractArticle(html: string, url: URL, now = new Date()): Articl
     dateSource: source,
     language,
     imageCandidates: extractImageCandidates(html, url.href),
+    category: extractCategory(html, url),
+    canonicalUrl: extractCanonicalUrl(html, url),
   };
 }
 
@@ -100,12 +107,110 @@ function firstTimeDatetime(html: string): string | null {
   return match ? decodeEntities(match).trim() : null;
 }
 
+// --- Canonical URL ---
+
+/**
+ * <link rel="canonical">, then og:url. Only an https Star News URL is accepted
+ * (it becomes the card's QR target); otherwise null and the caller falls back
+ * to the final post-redirect URL.
+ */
+export function extractCanonicalUrl(html: string, pageUrl: URL): string | null {
+  const candidates = [
+    ...tagsWithAttr(html, 'link', 'rel', (rel) => rel.toLowerCase().split(/\s+/).includes('canonical')).map((tag) =>
+      attr(tag, 'href'),
+    ),
+    firstMetaContent(html, ['og:url']),
+  ];
+  for (const raw of candidates) {
+    if (!raw) continue;
+    try {
+      const parsed = new URL(decodeEntities(raw).trim(), pageUrl);
+      if (parsed.protocol !== 'https:' || parsed.username || parsed.password) continue;
+      if (!isStarNewsHost(parsed.hostname)) continue;
+      parsed.hash = '';
+      return parsed.href;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+// --- Category ---
+
+const MAX_CATEGORY_LENGTH = 40;
+
+/**
+ * Category priority: article:section meta → JSON-LD articleSection → the site
+ * menu link (.mobile-menu-parent), accepted only when its path shares the
+ * article's top-level section (article /country/25787/… → link under /country/).
+ * The menu markup is site-wide, so unvalidated links would be random items.
+ */
+export function extractCategory(html: string, pageUrl: URL): string | null {
+  const fromMeta = firstMetaContent(html, ['article:section']);
+  const meta = cleanCategory(fromMeta);
+  if (meta) return meta;
+  const jsonLd = cleanCategory(firstJsonLdArticleSection(html));
+  if (jsonLd) return jsonLd;
+  return menuCategory(html, pageUrl);
+}
+
+function cleanCategory(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const text = decodeEntities(raw.replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim();
+  if (!text) return null;
+  return Array.from(text).slice(0, MAX_CATEGORY_LENGTH).join('');
+}
+
+/** Top-level section of a path; Star News menu links end in .html ("/sports.html" ≙ "/sports/…"). */
+function firstPathSegment(pathname: string): string {
+  return (pathname.split('/').find(Boolean)?.toLowerCase() ?? '').replace(/\.html?$/u, '');
+}
+
+function menuCategory(html: string, pageUrl: URL): string | null {
+  const section = firstPathSegment(pageUrl.pathname);
+  if (!section) return null;
+  const blocks = /<[^>]*\bclass=["'][^"']*\bmobile-menu-parent\b[^"']*["'][^>]*>([\s\S]*?)<\/a>/giu;
+  let match: RegExpExecArray | null;
+  while ((match = blocks.exec(html)) !== null) {
+    const anchor = (match[1] ?? '').match(/<a\b([^>]*)>([\s\S]*)$/iu);
+    if (!anchor) continue;
+    const href = attr(`<a ${anchor[1]}>`, 'href');
+    if (!href) continue;
+    let link: URL;
+    try {
+      link = new URL(decodeEntities(href), pageUrl);
+    } catch {
+      continue;
+    }
+    if (!isStarNewsHost(link.hostname)) continue;
+    if (firstPathSegment(link.pathname) !== section) continue;
+    const text = cleanCategory(anchor[2]);
+    if (text) return text;
+  }
+  return null;
+}
+
+function firstJsonLdArticleSection(html: string): string | null {
+  for (const block of jsonLdBlocks(html)) {
+    let found: string | null = null;
+    walkJsonLd(block, (node) => {
+      if (found || !isArticleType(node)) return;
+      const value = node.articleSection;
+      const first = Array.isArray(value) ? value.find((v) => typeof v === 'string' && v.trim()) : value;
+      if (typeof first === 'string' && first.trim()) found = first;
+    });
+    if (found) return found;
+  }
+  return null;
+}
+
 // --- Images ---
 
 export function extractImageCandidates(html: string, articleUrl: string): string[] {
   const ordered: string[] = [];
-  // 1-4. Meta images in legacy precedence.
-  for (const key of ['og:image:secure_url', 'og:image', 'twitter:image', 'twitter:image:src']) {
+  // 1-4. Meta images: og:image first (Star News' secure_url can lag behind it), then secure_url, twitter.
+  for (const key of ['og:image', 'og:image:secure_url', 'twitter:image', 'twitter:image:src']) {
     for (const value of allMetaContents(html, key)) ordered.push(value);
   }
   // 5. __NEXT_DATA__ mainImageFileName
@@ -198,6 +303,21 @@ function firstMetaContent(html: string, keys: string[]): string | null {
     if (values.length > 0 && values[0]!.trim()) return decodeEntities(values[0]!).trim();
   }
   return null;
+}
+
+function attr(tag: string, name: string): string | null {
+  return tag.match(new RegExp(`\\b${name}=["']([^"']*)["']`, 'iu'))?.[1] ?? null;
+}
+
+function tagsWithAttr(html: string, tagName: string, attrName: string, test: (value: string) => boolean): string[] {
+  const out: string[] = [];
+  const pattern = new RegExp(`<${tagName}\\b[^>]*>`, 'giu');
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(html)) !== null) {
+    const value = attr(match[0], attrName);
+    if (value !== null && test(value)) out.push(match[0]);
+  }
+  return out;
 }
 
 function matchTag(html: string, tag: string): string | null {

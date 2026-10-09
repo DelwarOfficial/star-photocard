@@ -96,3 +96,11 @@ Flow decisions:
 - **Title styling.** `titleColor`, `titleShadow`, `highlightColor` per template. Highlight = `#FFF200`, measured from the references (the pill yellow `#FFD700` is baked). Breaking and just-in have `highlightColor: null`, so `*marked*` words stay in the title colour.
 - **One style source.** Text/QR layer styles live in `src/lib/card/layerStyles.ts` and are used by both the React preview and the html2canvas exporter, so they cannot drift.
 - **Known gap — typeface.** The references set headlines in a lighter, narrower Bengali face than the bundled StarNews fonts. Positions match; line breaks can differ (e.g. breaking demo headline wraps to 4 lines instead of 3). Needs the reference font file to close.
+
+## Article category, canonical URL, image priority (2026-10-09)
+
+- **Category** (`extractCategory`): `article:section` meta → JSON-LD `articleSection` → `.mobile-menu-parent` link, accepted only when its top-level path matches the article's (`/sports.html` counts as `sports`, matching `/sports/25803/…`). Unvalidated menu links would be arbitrary site-wide items. It pre-fills the yellow pill (`photoTag`) on Generate only when the pill is empty; non-preset values appear in the editable custom field.
+- **Live check (starnews.com.bd, 2026-10-09):** pages have neither `article:section` nor `articleSection`, so the menu is the only source. A `/sports/` article yields "খেলা". **`/country/` articles yield no category**, because the menu has no `/country` link ("সারা দেশ" points to `/districts.html`).
+- **Canonical URL** (`extractCanonicalUrl`): `<link rel="canonical">` → `og:url` → final post-redirect URL. Accepted only as an https Star News URL, since it becomes the QR target on article cards. Custom cards still encode `https://starnews.com.bd`.
+- **Image priority:** `og:image` → `og:image:secure_url` → `twitter:image` → `twitter:image:src` → `__NEXT_DATA__` → `link[rel=image_src]` → in-article `<img>` → JSON-LD. The first that probes as a real image wins.
+- The article cache moved to `star-photocard-article-v2`, because v1 entries lack the category and declared-canonical fields.

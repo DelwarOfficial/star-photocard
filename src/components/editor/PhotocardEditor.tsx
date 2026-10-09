@@ -5,16 +5,17 @@ import { titleFontSize, tokenizeTitle } from '../../lib/card/highlightTitle';
 import { defaultRenderer } from '../../lib/card/html2canvasRenderer';
 import { clampPhotoOffset, clampToCanvas, previewScale } from '../../lib/card/geometry';
 import { normalizePhotoTag, PHOTO_TAG_MAX_LENGTH, PHOTO_TAG_PRESETS } from '../../lib/card/photoTag';
-import { cardReducer, clampFontSize, clampZoom } from '../../lib/card/reducer';
+import { cardReducer, clampFontSize, clampZoom, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from '../../lib/card/reducer';
 import { downloadFilename, isClipboardSupported } from '../../lib/card/renderer';
 import { highlightColor, pillStyle, qrStyle, dateStyle, titleStyle } from '../../lib/card/layerStyles';
 import { initialCardState } from '../../lib/card/types';
-import { todayBanglaDate } from '../../lib/text/dates';
+import { toBanglaDigits, todayBanglaDate } from '../../lib/text/dates';
 import { isStarNewsHost } from '../../lib/article/normalizeArticleUrl';
 
 type ArticlePayload = {
   canonicalUrl: string;
   title: string;
+  category?: string | null;
   language: 'bn' | 'en';
   imageUrl?: string;
 };
@@ -24,9 +25,40 @@ type StatusTone = 'info' | 'success' | 'warning' | 'error';
 const TITLE_SIZES = [44, 52, 60, 75];
 
 const MODE_COPY: Record<CardMode, { label: string; hint: string }> = {
-  article: { label: 'Article card', hint: 'Fetch the headline, photo and date from a Star News URL.' },
-  custom: { label: 'Custom card', hint: 'No URL — write the headline yourself.' },
+  article: { label: 'আর্টিকেল কার্ড', hint: 'স্টার নিউজের সংবাদের লিংক থেকে শিরোনাম, ছবি ও বিভাগ আনুন।' },
+  custom: { label: 'কাস্টম কার্ড', hint: 'লিংক ছাড়া — শিরোনাম নিজে লিখুন।' },
 };
+
+const IMAGE_SOURCE_LABEL: Record<'local' | 'remote' | 'fallback', string> = {
+  local: 'নিজের ফাইল (শুধু এই ব্রাউজারে)',
+  remote: 'সংবাদের ছবি',
+  fallback: 'ডিফল্ট ছবি',
+};
+
+const LAYER_LABELS: Record<'photo' | 'title' | 'qr', { name: string; position: string }> = {
+  photo: { name: 'ছবি', position: 'ছবির অবস্থান' },
+  title: { name: 'শিরোনাম', position: 'শিরোনামের অবস্থান' },
+  qr: { name: 'QR', position: 'QR-এর অবস্থান' },
+};
+
+type IconName = 'left' | 'up' | 'down' | 'right' | 'minus' | 'plus';
+const ICON_PATHS: Record<IconName, string> = {
+  left: 'M15 6l-6 6 6 6',
+  up: 'M6 15l6-6 6 6',
+  down: 'M6 9l6 6 6-6',
+  right: 'M9 6l6 6-6 6',
+  minus: 'M5 12h14',
+  plus: 'M12 5v14M5 12h14',
+};
+
+/** One stroke icon family (24-unit grid, 2px round stroke); the button carries the accessible name. */
+function Icon({ name }: { name: IconName }) {
+  return (
+    <svg className="icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+      <path d={ICON_PATHS[name]} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 /** Inline sizing for the card + frame; replaces the old fixed 1080 × 1080 CSS. */
 function canvasBox(template: TemplateDefinition, scale: number) {
@@ -39,39 +71,38 @@ function canvasBox(template: TemplateDefinition, scale: number) {
 
 function validateSourceUrl(raw: string): string | null {
   const value = raw.trim();
-  if (!value) return 'Enter a Star News article URL.';
+  if (!value) return 'স্টার নিউজের সংবাদের লিংক দিন।';
   let parsed: URL;
   try {
     parsed = new URL(value);
   } catch {
-    return 'Enter a valid secure (https) URL, for example https://starnews.com.bd/….';
+    return 'সঠিক নিরাপদ (https) লিংক দিন, যেমন https://starnews.com.bd/…';
   }
   if (parsed.protocol !== 'https:' || parsed.username || parsed.password) {
-    return 'Only secure https URLs without credentials are supported.';
+    return 'শুধু ইউজারনেম-পাসওয়ার্ড ছাড়া নিরাপদ https লিংক গ্রহণযোগ্য।';
   }
-  if (!isStarNewsHost(parsed.hostname)) return 'Only Star News URLs (starnews.com.bd and true subdomains) are supported.';
+  if (!isStarNewsHost(parsed.hostname)) return 'শুধু স্টার নিউজের লিংক (starnews.com.bd ও এর সাবডোমেইন) গ্রহণযোগ্য।';
   return null;
 }
 
-function exportFailureMessage(err: unknown, action: 'Download' | 'Copy'): string {
+function exportFailureMessage(err: unknown, action: 'ডাউনলোড' | 'কপি'): string {
   const code = err instanceof Error ? err.message : '';
   if (code === 'PHOTO_UNAVAILABLE') {
-    return 'The card photo could not be loaded (article image links expire after 10 minutes). Click Generate again or choose a local image, then retry.';
+    return 'কার্ডের ছবি লোড করা যায়নি (সংবাদের ছবির লিংক ১০ মিনিট পর মেয়াদোত্তীর্ণ হয়)। আবার “তৈরি করুন” চাপুন বা নিজের ছবি দিন, তারপর আবার চেষ্টা করুন।';
   }
-  if (code === 'TEMPLATE_UNAVAILABLE') return 'The template artwork could not be loaded. Pick another template or reload the page.';
-  return `Export failed. Check the image and try ${action} again.`;
+  if (code === 'TEMPLATE_UNAVAILABLE') return 'টেমপ্লেটের ছবি লোড করা যায়নি। অন্য টেমপ্লেট বেছে নিন বা পেজটি রিলোড করুন।';
+  return `এক্সপোর্ট ব্যর্থ হয়েছে। ছবিটি দেখে আবার ${action} করার চেষ্টা করুন।`;
 }
 
 export default function PhotocardEditor() {
   const [card, dispatch] = useReducer(cardReducer, initialCardState);
   const [status, setStatus] = useState<{ tone: StatusTone; text: string }>({
     tone: 'info',
-    text: 'Choose a card type, then fill in its inputs. Today’s date is added automatically.',
+    text: 'কার্ডের ধরন বেছে নিন, তারপর তথ্য দিন। আজকের তারিখ নিজে থেকেই বসে যায়।',
   });
   const [urlError, setUrlError] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [exporting, setExporting] = useState<'idle' | 'copy' | 'download'>('idle');
-  const [customTagMode, setCustomTagMode] = useState(false);
   const [lastRemoteImage, setLastRemoteImage] = useState<{ src: string; kind: 'remote' | 'fallback' } | null>(null);
 
   const requestSeq = useRef(0);
@@ -155,7 +186,7 @@ export default function PhotocardEditor() {
     const controller = new AbortController();
     abortRef.current = controller;
     dispatch({ type: 'GENERATE_START' });
-    announce('info', 'Fetching the Star News article… You can Cancel without losing your current work.');
+    announce('info', 'স্টার নিউজের সংবাদ আনা হচ্ছে… বর্তমান কাজ না হারিয়েই বাতিল করতে পারেন।');
     try {
       const response = await fetch('/api/article', {
         method: 'POST',
@@ -169,7 +200,7 @@ export default function PhotocardEditor() {
       };
       if (seq !== requestSeq.current) return; // stale response protection
       if (!response.ok || !payload.data) {
-        throw new Error(payload.error?.message ?? 'The article could not be loaded.');
+        throw new Error(payload.error?.message ?? 'সংবাদটি লোড করা যায়নি।');
       }
       const data = payload.data;
       if (localUrlRef.current) {
@@ -182,6 +213,7 @@ export default function PhotocardEditor() {
       dispatch({
         type: 'GENERATE_SUCCESS',
         articleUrl: data.canonicalUrl,
+        category: data.category ?? null,
         title: data.title,
         language: data.language,
         imageSrc,
@@ -193,19 +225,19 @@ export default function PhotocardEditor() {
         size: Math.min(titleFontSize(data.title), template.title.maxFontSize),
       });
       if (!data.imageUrl) {
-        announce('warning', 'Card generated with the bundled fallback photo because no article image was found.');
+        announce('warning', 'সংবাদের কোনো ছবি পাওয়া যায়নি, তাই ডিফল্ট ছবি দিয়ে কার্ড তৈরি হয়েছে।');
       } else {
-        announce('success', 'Card generated. Refine the content, then Copy or Download the PNG.');
+        announce('success', 'কার্ড তৈরি হয়েছে। প্রয়োজনমতো সম্পাদনা করে PNG কপি বা ডাউনলোড করুন।');
       }
     } catch (err) {
       if (seq !== requestSeq.current) return;
       if (err instanceof DOMException && err.name === 'AbortError') {
-        announce('info', 'Article request cancelled. Your existing composition was kept.');
+        announce('info', 'সংবাদ আনা বাতিল করা হয়েছে। আপনার বর্তমান কার্ড অপরিবর্তিত আছে।');
         dispatch({ type: 'GENERATE_ERROR' });
         return;
       }
       dispatch({ type: 'GENERATE_ERROR' });
-      announce('error', err instanceof Error ? err.message : 'The article could not be loaded.');
+      announce('error', err instanceof Error ? err.message : 'সংবাদটি লোড করা যায়নি।');
     }
   }, [card.sourceUrl, template, announce]);
 
@@ -213,7 +245,7 @@ export default function PhotocardEditor() {
     abortRef.current?.abort();
     requestSeq.current += 1;
     dispatch({ type: 'GENERATE_ERROR' });
-    announce('info', 'Article request cancelled. Your existing composition was kept.');
+    announce('info', 'সংবাদ আনা বাতিল করা হয়েছে। আপনার বর্তমান কার্ড অপরিবর্তিত আছে।');
   }, [announce]);
 
   const chooseLocalImage = useCallback(
@@ -221,25 +253,25 @@ export default function PhotocardEditor() {
       if (!file) return;
       const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
       if (!allowed.includes(file.type)) {
-        announce('error', 'Choose a JPG, PNG, WebP, or GIF file. The selected file was rejected.');
+        announce('error', 'JPG, PNG, WebP বা GIF ফাইল বেছে নিন। নির্বাচিত ফাইলটি গ্রহণ করা হয়নি।');
         return;
       }
       if (file.size > 8 * 1024 * 1024) {
-        announce('error', 'Local images must be no larger than 8 MB.');
+        announce('error', 'নিজের ছবি সর্বোচ্চ ৮ MB হতে পারে।');
         return;
       }
       if (localUrlRef.current) URL.revokeObjectURL(localUrlRef.current);
       const objectUrl = URL.createObjectURL(file);
       localUrlRef.current = objectUrl;
       dispatch({ type: 'SET_LOCAL_IMAGE', src: objectUrl });
-      announce('success', 'Local image loaded in this browser only. It is never uploaded.');
+      announce('success', 'ছবিটি শুধু এই ব্রাউজারে লোড হয়েছে; কোথাও আপলোড হয় না।');
     },
     [announce],
   );
 
   const restoreArticleImage = useCallback(() => {
     if (!lastRemoteImage) {
-      announce('info', 'No article image has been fetched yet.');
+      announce('info', 'এখনো কোনো সংবাদের ছবি আনা হয়নি।');
       return;
     }
     if (localUrlRef.current) {
@@ -247,12 +279,12 @@ export default function PhotocardEditor() {
       localUrlRef.current = undefined;
     }
     dispatch({ type: 'RESTORE_REMOTE_IMAGE', src: lastRemoteImage.src, kind: lastRemoteImage.kind });
-    announce('success', 'Restored the article image and reset photo zoom/position.');
+    announce('success', 'সংবাদের ছবি ফিরিয়ে আনা হয়েছে; জুম ও অবস্থান রিসেট হয়েছে।');
   }, [lastRemoteImage, announce]);
 
   const fullReset = useCallback(() => {
     if (card.isDirty) {
-      const confirmed = window.confirm('Reset the editor? Your current composition will be lost.');
+      const confirmed = window.confirm('এডিটর রিসেট করবেন? বর্তমান কার্ডটি মুছে যাবে।');
       if (!confirmed) return;
     }
     if (localUrlRef.current) {
@@ -262,10 +294,9 @@ export default function PhotocardEditor() {
     abortRef.current?.abort();
     requestSeq.current += 1;
     setLastRemoteImage(null);
-    setCustomTagMode(false);
     setUrlError(null);
     dispatch({ type: 'FULL_RESET', date: todayBanglaDate(), templateId: template.id });
-    announce('info', 'Editor reset. Today’s date was filled in again.');
+    announce('info', 'এডিটর রিসেট হয়েছে। আজকের তারিখ আবার বসানো হয়েছে।');
   }, [card.isDirty, template.id, announce]);
 
   const nudge = useCallback(
@@ -342,12 +373,12 @@ export default function PhotocardEditor() {
         document.body.appendChild(link);
         link.click();
         link.remove();
-        announce('success', `PNG downloaded at exactly ${template.canvas.width} × ${template.canvas.height}.`);
+        announce('success', `PNG ডাউনলোড হয়েছে (ঠিক ${template.canvas.width} × ${template.canvas.height})।`);
       } finally {
         setTimeout(() => URL.revokeObjectURL(url), 5000);
       }
     } catch (err) {
-      announce('error', exportFailureMessage(err, 'Download'));
+      announce('error', exportFailureMessage(err, 'ডাউনলোড'));
     } finally {
       setExporting('idle');
     }
@@ -356,7 +387,7 @@ export default function PhotocardEditor() {
   const copy = useCallback(async () => {
     if (!canExport) return;
     if (!isClipboardSupported()) {
-      announce('warning', 'Copy needs a secure (HTTPS) browser with ClipboardItem support. Use Download PNG instead.');
+      announce('warning', 'কপি করতে নিরাপদ (HTTPS) ব্রাউজার ও ClipboardItem সাপোর্ট লাগে। এর বদলে PNG ডাউনলোড করুন।');
       return;
     }
     setExporting('copy');
@@ -364,21 +395,32 @@ export default function PhotocardEditor() {
     try {
       blob = await exportBlob();
     } catch (err) {
-      announce('error', exportFailureMessage(err, 'Copy'));
+      announce('error', exportFailureMessage(err, 'কপি'));
       setExporting('idle');
       return;
     }
     try {
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-      announce('success', 'Card copied as a PNG image. You can paste it into your newsroom workflow.');
+      announce('success', 'কার্ডটি PNG ছবি হিসেবে কপি হয়েছে।');
     } catch {
-      announce('warning', 'Copy was blocked or failed. The PNG is still available via Download.');
+      announce('warning', 'কপি করা যায়নি। ডাউনলোড করে PNG নিতে পারেন।');
     } finally {
       setExporting('idle');
     }
   }, [canExport, exportBlob, announce]);
 
   const loading = card.loadStatus === 'loading';
+  /** Zoom and re-clamp the pan so zooming out never exposes the window behind the photo. */
+  const setZoom = (scale: number) => {
+    const next = clampZoom(scale);
+    dispatch({ type: 'SET_IMAGE_SCALE', scale: next });
+    if (template.photo) {
+      dispatch({
+        type: 'SET_PHOTO_POSITION',
+        position: clampPhotoOffset(photoSize, template.photo, next, card.photoPosition),
+      });
+    }
+  };
   const isArticle = template.mode === 'article';
   const box = canvasBox(template, scale);
   const pill = pillStyle(template);
@@ -387,7 +429,6 @@ export default function PhotocardEditor() {
   const { width: canvasW, height: canvasH } = template.canvas;
 
   const switchTemplate = (id: string) => {
-    setCustomTagMode(false);
     dispatch({ type: 'SWITCH_TEMPLATE', templateId: id });
   };
 
@@ -395,34 +436,33 @@ export default function PhotocardEditor() {
     <div className="app-shell">
       <header className="app-header">
         <div>
-          <p className="eyebrow">Star News Studio</p>
-          <h1>Photocard Generator</h1>
+          <h1>ফটোকার্ড জেনারেটর</h1>
           <p className="subhead">
-            {canvasW} × {canvasH} PNG · Article and custom cards · Bengali
+            স্টার নিউজ · {canvasW} × {canvasH} PNG · আর্টিকেল ও কাস্টম কার্ড
           </p>
         </div>
         <div className="header-side">
           <p className="header-status" aria-hidden="true">
             {template.label} ·{' '}
             {needsUpload
-              ? 'Needs a photo'
+              ? 'ছবি দরকার'
               : card.loadStatus === 'loading'
-                ? 'Fetching…'
+                ? 'আনা হচ্ছে…'
                 : canExport
-                  ? 'Ready to export'
-                  : 'Needs a headline'}
+                  ? 'এক্সপোর্টের জন্য প্রস্তুত'
+                  : 'শিরোনাম দরকার'}
           </p>
           <button type="button" className="button secondary" onClick={fullReset}>
-            Reset
+            রিসেট
           </button>
         </div>
       </header>
 
       <div className="workspace">
-        <div className="controls" aria-label="Photocard controls">
+        <div className="controls" aria-label="ফটোকার্ড নিয়ন্ত্রণ">
           <section aria-labelledby="type-heading">
             <fieldset>
-              <legend id="type-heading">1. Card type</legend>
+              <legend id="type-heading">১. কার্ডের ধরন</legend>
               {(['article', 'custom'] as const).map((mode) => (
                 <div key={mode} className="mode-group">
                   <span className="field-label" id={`mode-${mode}-label`}>
@@ -456,11 +496,11 @@ export default function PhotocardEditor() {
 
           <section aria-labelledby="content-heading">
             <fieldset>
-              <legend id="content-heading">2. Content</legend>
+              <legend id="content-heading">২. বিষয়বস্তু</legend>
 
               {isArticle && (
                 <>
-                  <label htmlFor="article-url">Star News article URL</label>
+                  <label htmlFor="article-url">স্টার নিউজের সংবাদের লিংক</label>
                   <input
                     id="article-url"
                     type="url"
@@ -481,7 +521,7 @@ export default function PhotocardEditor() {
                       }
                     }}
                   />
-                  <small id="url-help">Fetches the headline, photo and date. Everything stays editable.</small>
+                  <small id="url-help">শিরোনাম, ছবি ও বিভাগ আনা হবে। সবকিছু পরে সম্পাদনা করা যাবে।</small>
                   {urlError && (
                     <p id="article-url-error" className="field-error" role="alert">
                       {urlError}
@@ -494,11 +534,11 @@ export default function PhotocardEditor() {
                       onClick={() => void generate()}
                       disabled={loading || exporting !== 'idle'}
                     >
-                      {loading ? 'Fetching…' : 'Generate'}
+                      {loading ? 'আনা হচ্ছে…' : 'তৈরি করুন'}
                     </button>
                     {loading && (
                       <button type="button" className="button secondary" onClick={cancelGenerate}>
-                        Cancel
+                        বাতিল
                       </button>
                     )}
                   </div>
@@ -507,21 +547,21 @@ export default function PhotocardEditor() {
 
               {template.requiresImage && (
                 <>
-                  <label htmlFor="local-image">Photo (required · JPG, PNG, WebP, GIF ≤ 8 MB)</label>
+                  <label htmlFor="local-image">ছবি (আবশ্যক · JPG, PNG, WebP, GIF ≤ ৮ MB)</label>
                   <input
                     id="local-image"
                     type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    accept="image/*"
                     aria-describedby="local-image-help"
                     onChange={(e) => chooseLocalImage(e.target.files?.[0])}
                   />
                   <small id="local-image-help">
-                    {needsUpload ? 'Upload a photo to enable export.' : 'Photo loaded in this browser only.'}
+                    {needsUpload ? 'এক্সপোর্ট চালু করতে একটি ছবি দিন।' : 'ছবিটি শুধু এই ব্রাউজারে আছে।'}
                   </small>
                 </>
               )}
 
-              <label htmlFor="headline">Headline</label>
+              <label htmlFor="headline">শিরোনাম</label>
               <textarea
                 id="headline"
                 rows={3}
@@ -533,16 +573,16 @@ export default function PhotocardEditor() {
               <p id="headline-stats" className="word-hint" aria-live="off">
                 {(() => {
                   const words = card.title.trim() ? card.title.trim().split(/\s+/u).length : 0;
-                  return `${words} ${words === 1 ? 'word' : 'words'} · auto size ${titleFontSize(card.title)}px`;
+                  return `${toBanglaDigits(String(words))} শব্দ · স্বয়ংক্রিয় আকার ${titleFontSize(card.title)}px`;
                 })()}
               </p>
               <small id="headline-help">
                 {template.highlightColor
-                  ? 'Wrap words in *asterisks* to highlight them in yellow. Without markup, part of the title highlights automatically. New lines are preserved.'
-                  : 'This card has no highlight colour. New lines are preserved.'}
+                  ? 'হলুদ করতে শব্দগুলো *তারকাচিহ্নের* মধ্যে লিখুন। চিহ্ন না দিলে শিরোনামের একাংশ নিজে থেকেই হলুদ হয়। নতুন লাইন বজায় থাকে।'
+                  : 'এই কার্ডে হাইলাইট রং নেই। নতুন লাইন বজায় থাকে।'}
               </small>
 
-              <label htmlFor="pub-date">Date</label>
+              <label htmlFor="pub-date">তারিখ</label>
               <div className="input-action">
                 <input
                   id="pub-date"
@@ -557,54 +597,34 @@ export default function PhotocardEditor() {
                   className="button secondary"
                   onClick={() => dispatch({ type: 'SET_DATE', date: todayBanglaDate() })}
                 >
-                  Today
+                  আজ
                 </button>
               </div>
-              <small id="pub-date-help">Filled in automatically with today’s date. Edit it if needed.</small>
+              <small id="pub-date-help">আজকের তারিখ নিজে থেকেই বসে; প্রয়োজনে বদলান।</small>
 
               {template.photoTag && (
                 <>
-                  <label htmlFor="photo-tag-select">Category (yellow label)</label>
-                  <select
-                    id="photo-tag-select"
-                    value={customTagMode ? '__custom__' : card.photoTag || ''}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      if (value === '__custom__') {
-                        setCustomTagMode(true);
-                        return;
-                      }
-                      setCustomTagMode(false);
-                      dispatch({ type: 'SET_PHOTO_TAG', tag: normalizePhotoTag(value) });
-                    }}
-                  >
-                    <option value="">No category</option>
+                  <label htmlFor="photo-tag">বিভাগ (হলুদ লেবেল)</label>
+                  <input
+                    id="photo-tag"
+                    type="text"
+                    list="photo-tag-presets"
+                    value={card.photoTag}
+                    maxLength={PHOTO_TAG_MAX_LENGTH}
+                    placeholder="বিভাগ লিখুন, যেমন রাজনীতি"
+                    autoComplete="off"
+                    aria-describedby="photo-tag-help"
+                    onChange={(e) => dispatch({ type: 'SET_PHOTO_TAG', tag: normalizePhotoTag(e.target.value) })}
+                  />
+                  <datalist id="photo-tag-presets">
                     {PHOTO_TAG_PRESETS.map((preset) => (
-                      <option key={preset} value={preset}>
-                        {preset}
-                      </option>
+                      <option key={preset} value={preset} />
                     ))}
-                    <option value="__custom__">Custom…</option>
-                  </select>
-
-                  {customTagMode && (
-                    <div>
-                      <label htmlFor="photo-tag-custom">Custom category (max {PHOTO_TAG_MAX_LENGTH} characters)</label>
-                      <input
-                        id="photo-tag-custom"
-                        type="text"
-                        value={card.photoTag}
-                        maxLength={PHOTO_TAG_MAX_LENGTH}
-                        placeholder="বিভাগ লিখুন"
-                        autoComplete="off"
-                        aria-describedby="photo-tag-count"
-                        onChange={(e) => dispatch({ type: 'SET_PHOTO_TAG', tag: normalizePhotoTag(e.target.value) })}
-                      />
-                      <small id="photo-tag-count">
-                        {Array.from(card.photoTag).length}/{PHOTO_TAG_MAX_LENGTH} characters
-                      </small>
-                    </div>
-                  )}
+                  </datalist>
+                  <small id="photo-tag-help">
+                    সংবাদ থেকে পাওয়া গেলে নিজে থেকেই বসে। {toBanglaDigits(String(Array.from(card.photoTag).length))}/
+                    {toBanglaDigits(String(PHOTO_TAG_MAX_LENGTH))} অক্ষর; লেবেল না চাইলে ফাঁকা রাখুন।
+                  </small>
                 </>
               )}
             </fieldset>
@@ -612,39 +632,62 @@ export default function PhotocardEditor() {
 
           <section aria-labelledby="design-heading">
             <fieldset>
-              <legend id="design-heading">3. Layout</legend>
+              <legend id="design-heading">৩. লেআউট</legend>
 
               {template.photo && (
                 <>
                   {isArticle && (
                     <>
-                      <label htmlFor="local-image">Replace photo (optional · JPG, PNG, WebP, GIF ≤ 8 MB)</label>
+                      <label htmlFor="local-image">ছবি বদলান (ঐচ্ছিক · JPG, PNG, WebP, GIF ≤ ৮ MB)</label>
                       <input
                         id="local-image"
                         type="file"
-                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        accept="image/*"
                         onChange={(e) => chooseLocalImage(e.target.files?.[0])}
                       />
                       <div className="input-action">
                         <button type="button" className="button secondary" onClick={restoreArticleImage}>
-                          Restore article image
+                          সংবাদের ছবি ফিরিয়ে আনুন
                         </button>
                       </div>
                       <p className="field-note">
-                        Image source: {card.image.kind === 'local' ? 'local file (this browser only)' : card.image.kind}.
+                        ছবির উৎস: {IMAGE_SOURCE_LABEL[card.image.kind]}।
                       </p>
                     </>
                   )}
-                  <label htmlFor="zoom-range">Photo zoom: {card.imageScale.toFixed(1)}× (1–3)</label>
-                  <input
-                    id="zoom-range"
-                    type="range"
-                    min={1}
-                    max={3}
-                    step={0.1}
-                    value={card.imageScale}
-                    onChange={(e) => dispatch({ type: 'SET_IMAGE_SCALE', scale: clampZoom(Number(e.target.value)) })}
-                  />
+                  <label htmlFor="zoom-range">
+                    ছবির জুম: {card.imageScale.toFixed(1)}× ({ZOOM_MIN}–{ZOOM_MAX})
+                  </label>
+                  <div className="zoom-controls">
+                    <button
+                      type="button"
+                      className="chip"
+                      aria-label="ছবি ছোট করুন"
+                      disabled={card.imageScale <= ZOOM_MIN}
+                      onClick={() => setZoom(card.imageScale - ZOOM_STEP)}
+                    >
+                      <Icon name="minus" />
+                    </button>
+                    <input
+                      id="zoom-range"
+                      type="range"
+                      min={ZOOM_MIN}
+                      max={ZOOM_MAX}
+                      step={ZOOM_STEP}
+                      value={card.imageScale}
+                      onChange={(e) => setZoom(Number(e.target.value))}
+                    />
+                    <button
+                      type="button"
+                      className="chip"
+                      aria-label="ছবি বড় করুন"
+                      disabled={card.imageScale >= ZOOM_MAX}
+                      onClick={() => setZoom(card.imageScale + ZOOM_STEP)}
+                    >
+                      <Icon name="plus" />
+                    </button>
+                  </div>
+                  <small>জুম করে কার্ডের ওপর ছবি টেনে (বা নিচের তীর দিয়ে) সরান।</small>
                   <PositionControls
                     layer="photo"
                     x={card.photoPosition.x}
@@ -656,7 +699,7 @@ export default function PhotocardEditor() {
                 </>
               )}
 
-              <label htmlFor="font-size-range">Headline size: {card.fontSize}px (30–120)</label>
+              <label htmlFor="font-size-range">শিরোনামের আকার: {card.fontSize}px (30–120)</label>
               <input
                 id="font-size-range"
                 type="range"
@@ -668,7 +711,7 @@ export default function PhotocardEditor() {
               />
               <div className="input-action">
                 <label htmlFor="font-size-number" className="visually-hidden">
-                  Headline size value
+                  শিরোনামের আকারের মান
                 </label>
                 <input
                   id="font-size-number"
@@ -678,7 +721,7 @@ export default function PhotocardEditor() {
                   value={card.fontSize}
                   onChange={(e) => dispatch({ type: 'SET_FONT_SIZE', size: clampFontSize(Number(e.target.value)) })}
                 />
-                <div className="size-presets" role="group" aria-label="Suggested headline sizes">
+                <div className="size-presets" role="group" aria-label="প্রস্তাবিত শিরোনামের আকার">
                   {[...new Set([...TITLE_SIZES, template.title.defaultFontSize])]
                     .sort((x, y) => x - y)
                     .map((size) => (
@@ -717,24 +760,26 @@ export default function PhotocardEditor() {
                     <input
                       id="qr-visible"
                       type="checkbox"
+                      role="switch"
+                      className="switch"
                       checked={card.qrVisible}
                       onChange={(e) => dispatch({ type: 'SET_QR_VISIBLE', visible: e.target.checked })}
                     />
                     <label htmlFor="qr-visible">
-                      {isArticle ? 'Show QR code (links to the article this card was made from)' : 'Show QR code (links to starnews.com.bd)'}
+                      {isArticle ? 'QR কোড দেখান (যে সংবাদ থেকে কার্ড তৈরি, তার লিংক)' : 'QR কোড দেখান (starnews.com.bd-এর লিংক)'}
                     </label>
                   </div>
                 </>
               )}
               <button type="button" className="button secondary" onClick={() => dispatch({ type: 'RESET_LAYOUT' })}>
-                Reset layout to template defaults
+                টেমপ্লেটের ডিফল্ট লেআউটে ফিরুন
               </button>
             </fieldset>
           </section>
 
-          <section aria-labelledby="export-heading">
+          <section aria-labelledby="export-heading" aria-busy={exporting !== 'idle'}>
             <fieldset>
-              <legend id="export-heading">4. Export</legend>
+              <legend id="export-heading">৪. এক্সপোর্ট</legend>
               <div className="export-actions">
                 <button
                   type="button"
@@ -742,7 +787,7 @@ export default function PhotocardEditor() {
                   disabled={!canExport || exporting !== 'idle'}
                   onClick={() => void download()}
                 >
-                  {exporting === 'download' ? 'Exporting…' : 'Download PNG'}
+                  {exporting === 'download' ? 'এক্সপোর্ট হচ্ছে…' : 'PNG ডাউনলোড'}
                 </button>
                 <button
                   type="button"
@@ -751,16 +796,16 @@ export default function PhotocardEditor() {
                   onClick={() => void copy()}
                   title={
                     clipboardSupported
-                      ? 'Copy the PNG to the clipboard'
-                      : 'Copy needs HTTPS + ClipboardItem support; Download always works'
+                      ? 'PNG ক্লিপবোর্ডে কপি করুন'
+                      : 'কপির জন্য HTTPS ও ClipboardItem সাপোর্ট লাগে; ডাউনলোড সবসময় কাজ করে'
                   }
                 >
-                  {exporting === 'copy' ? 'Copying…' : 'Copy PNG'}
+                  {exporting === 'copy' ? 'কপি হচ্ছে…' : 'PNG কপি'}
                 </button>
               </div>
-              {needsUpload && <p className="field-note">Upload a photo for this card to enable export.</p>}
+              {needsUpload && <p className="field-note">এক্সপোর্ট চালু করতে এই কার্ডের জন্য একটি ছবি দিন।</p>}
               {!clipboardSupported && (
-                <p className="field-note">Copy needs a secure browser with image-clipboard support. Download always works.</p>
+                <p className="field-note">কপির জন্য ছবি-ক্লিপবোর্ড সাপোর্টসহ নিরাপদ ব্রাউজার লাগে। ডাউনলোড সবসময় কাজ করে।</p>
               )}
             </fieldset>
           </section>
@@ -770,7 +815,7 @@ export default function PhotocardEditor() {
           </p>
         </div>
 
-        <section className="preview-stage" aria-label="Photocard preview">
+        <section className="preview-stage" aria-label="ফটোকার্ডের প্রিভিউ" aria-busy={loading || exporting !== 'idle'}>
           <div className="preview-frame" ref={previewFrameRef} style={box.frame}>
             <div
               className={`card ${card.language === 'bn' ? 'bangla' : 'english'}`}
@@ -779,7 +824,7 @@ export default function PhotocardEditor() {
             >
               {template.photo && (
                 <DraggableLayer
-                  label="Photo layer"
+                  label="ছবির স্তর"
                   position={{ x: 0, y: 0 }}
                   scale={scale}
                   onMove={(dx, dy) => nudge('photo', dx, dy)}
@@ -822,7 +867,7 @@ export default function PhotocardEditor() {
                 </div>
               )}
               <DraggableLayer
-                label="Headline layer"
+                label="শিরোনামের স্তর"
                 position={card.titlePosition}
                 scale={scale}
                 onMove={(dx, dy) => nudge('title', dx, dy)}
@@ -846,7 +891,7 @@ export default function PhotocardEditor() {
               </DraggableLayer>
               {qr && card.qrVisible && qrDataUrl && (
                 <DraggableLayer
-                  label="QR code layer"
+                  label="QR কোডের স্তর"
                   position={card.qrPosition}
                   scale={scale}
                   onMove={(dx, dy) => nudge('qr', dx, dy)}
@@ -855,7 +900,7 @@ export default function PhotocardEditor() {
                   <div className="qr" style={qr as React.CSSProperties}>
                     <img
                       src={qrDataUrl}
-                      alt={isArticle ? 'QR code linking to the source article' : 'QR code linking to starnews.com.bd'}
+                      alt={isArticle ? 'সংবাদের লিংকসহ QR কোড' : 'starnews.com.bd-এর লিংকসহ QR কোড'}
                       draggable={false}
                     />
                   </div>
@@ -864,7 +909,7 @@ export default function PhotocardEditor() {
             </div>
           </div>
           <p className="dimensions">
-            {canvasW} × {canvasH} PNG · preview scale {scale.toFixed(2)}×
+            {canvasW} × {canvasH} PNG · প্রিভিউ স্কেল {scale.toFixed(2)}×
           </p>
         </section>
       </div>
@@ -880,7 +925,7 @@ function PositionControls(props: {
   onReset: () => void;
   onKeyDown: (event: React.KeyboardEvent) => void;
 }) {
-  const label = props.layer === 'photo' ? 'Photo position' : props.layer === 'title' ? 'Headline position' : 'QR position';
+  const { name, position: label } = LAYER_LABELS[props.layer];
   return (
     <div className="position-controls" onKeyDown={props.onKeyDown}>
       <span className="field-label" id={`${props.layer}-pos-label`}>
@@ -892,23 +937,23 @@ function PositionControls(props: {
         aria-labelledby={`${props.layer}-pos-label`}
         aria-describedby={`${props.layer}-pos-help`}
       >
-        <button type="button" className="chip" aria-label={`Move ${props.layer} left`} onClick={() => props.onNudge(-1, 0)}>
-          ←
+        <button type="button" className="chip" aria-label={`${name} বাঁয়ে সরান`} onClick={() => props.onNudge(-1, 0)}>
+          <Icon name="left" />
         </button>
-        <button type="button" className="chip" aria-label={`Move ${props.layer} up`} onClick={() => props.onNudge(0, -1)}>
-          ↑
+        <button type="button" className="chip" aria-label={`${name} ওপরে সরান`} onClick={() => props.onNudge(0, -1)}>
+          <Icon name="up" />
         </button>
-        <button type="button" className="chip" aria-label={`Move ${props.layer} down`} onClick={() => props.onNudge(0, 1)}>
-          ↓
+        <button type="button" className="chip" aria-label={`${name} নিচে সরান`} onClick={() => props.onNudge(0, 1)}>
+          <Icon name="down" />
         </button>
-        <button type="button" className="chip" aria-label={`Move ${props.layer} right`} onClick={() => props.onNudge(1, 0)}>
-          →
+        <button type="button" className="chip" aria-label={`${name} ডানে সরান`} onClick={() => props.onNudge(1, 0)}>
+          <Icon name="right" />
         </button>
         <button type="button" className="chip" onClick={props.onReset}>
-          Reset {props.layer}
+          {name} রিসেট
         </button>
       </div>
-      <small id={`${props.layer}-pos-help`}>Arrow keys move 1 px, Shift+Arrow moves 10 px. Dragging also works.</small>
+      <small id={`${props.layer}-pos-help`}>তীর চিহ্নে ১ px, Shift+তীরে ১০ px সরে। টেনেও সরানো যায়।</small>
     </div>
   );
 }
@@ -925,7 +970,7 @@ function DraggableLayer(props: {
   return (
     <div
       role="group"
-      aria-label={`${props.label}. Use arrow keys to nudge.`}
+      aria-label={`${props.label}। সরাতে তীর চিহ্ন ব্যবহার করুন।`}
       tabIndex={0}
       className="drag-layer"
       style={{ position: 'absolute', inset: 0 }}

@@ -1,4 +1,5 @@
 import { getTemplate } from '../../config/templates';
+import { normalizePhotoTag } from './photoTag';
 import { createCardState, layoutDefaults, type CardState } from './types';
 
 export type CardAction =
@@ -8,6 +9,8 @@ export type CardAction =
       type: 'GENERATE_SUCCESS';
       articleUrl: string;
       title: string;
+      /** Article category; pre-fills the pill only when the user has not set one. */
+      category?: string | null;
       language: CardState['language'];
       imageSrc: string;
       imageKind: CardState['image']['kind'];
@@ -37,9 +40,16 @@ export function clampFontSize(size: number): number {
   return Math.min(120, Math.max(30, Math.round(size)));
 }
 
+/** Photo zoom bounds: 1 = cover the window exactly; 3 = triple. */
+export const ZOOM_MIN = 1;
+export const ZOOM_MAX = 3;
+export const ZOOM_STEP = 0.1;
+
 export function clampZoom(scale: number): number {
-  if (!Number.isFinite(scale)) return 1;
-  return Math.min(3, Math.max(1, scale));
+  if (!Number.isFinite(scale)) return ZOOM_MIN;
+  // Round to the step so repeated +/- never accumulates float drift (1.1 + 0.1 = 1.2000000000000002).
+  const stepped = Math.round(scale / ZOOM_STEP) * ZOOM_STEP;
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Number(stepped.toFixed(2))));
 }
 
 export function cardReducer(state: CardState, action: CardAction): CardState {
@@ -52,6 +62,7 @@ export function cardReducer(state: CardState, action: CardAction): CardState {
       return {
         ...state,
         articleUrl: action.articleUrl,
+        photoTag: state.photoTag || normalizePhotoTag(action.category ?? ''),
         title: action.title,
         // The card date is always today's (or the user's edit); the article date is not used.
         language: action.language,

@@ -5,7 +5,7 @@ import { CARD_HEIGHT, CARD_WIDTH, templates, templatesForMode } from '../../src/
 import { coverGeometry, clampPhotoOffset, clampToCanvas, previewScale } from '../../src/lib/card/geometry';
 import { titleFontSize, tokenizeTitle } from '../../src/lib/card/highlightTitle';
 import { normalizePhotoTag, countCodePoints } from '../../src/lib/card/photoTag';
-import { cardReducer } from '../../src/lib/card/reducer';
+import { cardReducer, clampZoom, ZOOM_MAX, ZOOM_MIN } from '../../src/lib/card/reducer';
 import { createCardState, initialCardState } from '../../src/lib/card/types';
 import { formatDhakaDate, parseArticleDate, toBanglaDigits, todayBanglaDate } from '../../src/lib/text/dates';
 
@@ -259,6 +259,24 @@ describe('reducer', () => {
     // A reset keeps the chosen card type and its layout defaults.
     expect(reset.templateId).toBe('breaking-news');
     expect(reset.titlePosition).toEqual({ x: templates[5]!.title.x, y: templates[5]!.title.y });
+  });
+  it('pre-fills the pill with the article category only when the user has not set one', () => {
+    const success = { type: 'GENERATE_SUCCESS', articleUrl: 'https://starnews.com.bd/a', title: 't', language: 'bn', imageSrc: '/p.jpg', imageKind: 'remote', category: 'রংপুর' } as const;
+    expect(cardReducer(initialCardState, success).photoTag).toBe('রংপুর');
+    const userSet = cardReducer(initialCardState, { type: 'SET_PHOTO_TAG', tag: 'খেলা' });
+    expect(cardReducer(userSet, success).photoTag).toBe('খেলা');
+    expect(cardReducer(initialCardState, { ...success, category: null }).photoTag).toBe('');
+    // Still editable afterwards.
+    const edited = cardReducer(cardReducer(initialCardState, success), { type: 'SET_PHOTO_TAG', tag: 'জাতীয়' });
+    expect(edited.photoTag).toBe('জাতীয়');
+  });
+  it('steps zoom without float drift and clamps it', () => {
+    let z = 1;
+    for (let i = 0; i < 5; i += 1) z = clampZoom(z + 0.1);
+    expect(z).toBe(1.5);
+    expect(clampZoom(99)).toBe(ZOOM_MAX);
+    expect(clampZoom(-1)).toBe(ZOOM_MIN);
+    expect(clampZoom(Number.NaN)).toBe(ZOOM_MIN);
   });
   it('clamps font and zoom bounds', () => {
     expect(cardReducer(initialCardState, { type: 'SET_FONT_SIZE', size: 10 }).fontSize).toBe(30);

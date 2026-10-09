@@ -81,7 +81,7 @@ const pillAt = (y: number) => ({ ...rect(681, y, 236, 73), fontSize: a(44) });
 export const templates: readonly TemplateDefinition[] = [
   {
     id: 'common-card',
-    label: 'Photo top',
+    label: 'ছবি ওপরে',
     src: '/templates/common-card.png',
     thumbnail: '/templates/common-card.png',
     language: 'bn',
@@ -102,7 +102,7 @@ export const templates: readonly TemplateDefinition[] = [
   },
   {
     id: 'common-card-bottom',
-    label: 'Photo bottom',
+    label: 'ছবি নিচে',
     src: '/templates/common-card-bottom.png',
     thumbnail: '/templates/common-card-bottom.png',
     language: 'bn',
@@ -123,7 +123,7 @@ export const templates: readonly TemplateDefinition[] = [
   },
   {
     id: 'special-card-top',
-    label: 'Full photo, headline top',
+    label: 'পূর্ণ ছবি, শিরোনাম ওপরে',
     src: '/templates/Special-card-top.png',
     thumbnail: '/templates/Special-card-top.png',
     language: 'bn',
@@ -144,7 +144,7 @@ export const templates: readonly TemplateDefinition[] = [
   },
   {
     id: 'special-card-bottom',
-    label: 'Full photo, headline bottom',
+    label: 'পূর্ণ ছবি, শিরোনাম নিচে',
     src: '/templates/Special-card-bottom.png',
     thumbnail: '/templates/Special-card-bottom.png',
     language: 'bn',
@@ -165,7 +165,7 @@ export const templates: readonly TemplateDefinition[] = [
   },
   {
     id: 'just-in',
-    label: 'Just In (সদ্য প্রাপ্ত)',
+    label: 'সদ্য প্রাপ্ত',
     src: '/templates/just-in.png',
     thumbnail: '/templates/just-in.png',
     language: 'bn',
@@ -188,7 +188,7 @@ export const templates: readonly TemplateDefinition[] = [
   },
   {
     id: 'breaking-news',
-    label: 'Breaking News (ব্রেকিং নিউজ)',
+    label: 'ব্রেকিং নিউজ',
     src: '/templates/Breaking_NEWS.png',
     thumbnail: '/templates/Breaking_NEWS.png',
     language: 'bn',

@@ -14,18 +14,18 @@ const IMAGE_PROBE_TIMEOUT_MS = 5_000;
 const requestSchema = z.object({ url: z.string().trim().min(1).max(2048) }).strict();
 
 const messages: Record<string, readonly [string, string, number]> = {
-  INVALID_URL: ['INVALID_URL', 'Enter a valid secure (https) article URL.', 400],
-  INVALID_HOST: ['INVALID_HOST', 'Only Star News article URLs are supported.', 403],
-  INVALID_REQUEST: ['INVALID_REQUEST', 'Enter a valid article URL.', 400],
-  REDIRECT_LOOP: ['REDIRECT_REJECTED', 'The article redirect was rejected.', 502],
-  REDIRECT_REJECTED: ['REDIRECT_REJECTED', 'The article redirect was rejected.', 502],
-  RESPONSE_TOO_LARGE: ['RESPONSE_TOO_LARGE', 'The article response is too large.', 413],
-  UNSUPPORTED_CONTENT: ['UNSUPPORTED_CONTENT', 'The URL did not return an HTML article.', 415],
-  UNSUPPORTED_IMAGE: ['UPSTREAM_ERROR', 'The article could not be loaded.', 502],
-  MISSING_TITLE: ['MISSING_TITLE', 'No usable article headline was found.', 422],
-  EMPTY_RESPONSE: ['EMPTY_RESPONSE', 'The article returned no content.', 502],
-  UPSTREAM_ERROR: ['UPSTREAM_ERROR', 'The article could not be loaded.', 502],
-  RATE_LIMITED: ['RATE_LIMITED', 'Too many requests. Try again shortly.', 429],
+  INVALID_URL: ['INVALID_URL', 'সঠিক নিরাপদ (https) সংবাদের লিংক দিন।', 400],
+  INVALID_HOST: ['INVALID_HOST', 'শুধু স্টার নিউজের সংবাদের লিংক গ্রহণযোগ্য।', 403],
+  INVALID_REQUEST: ['INVALID_REQUEST', 'সঠিক সংবাদের লিংক দিন।', 400],
+  REDIRECT_LOOP: ['REDIRECT_REJECTED', 'সংবাদের রিডাইরেক্ট গ্রহণ করা হয়নি।', 502],
+  REDIRECT_REJECTED: ['REDIRECT_REJECTED', 'সংবাদের রিডাইরেক্ট গ্রহণ করা হয়নি।', 502],
+  RESPONSE_TOO_LARGE: ['RESPONSE_TOO_LARGE', 'সংবাদের পেজটি অনেক বড়।', 413],
+  UNSUPPORTED_CONTENT: ['UNSUPPORTED_CONTENT', 'লিংকটি থেকে কোনো HTML সংবাদ পাওয়া যায়নি।', 415],
+  UNSUPPORTED_IMAGE: ['UPSTREAM_ERROR', 'সংবাদটি লোড করা যায়নি।', 502],
+  MISSING_TITLE: ['MISSING_TITLE', 'ব্যবহারযোগ্য কোনো শিরোনাম পাওয়া যায়নি।', 422],
+  EMPTY_RESPONSE: ['EMPTY_RESPONSE', 'সংবাদের পেজে কোনো কনটেন্ট নেই।', 502],
+  UPSTREAM_ERROR: ['UPSTREAM_ERROR', 'সংবাদটি লোড করা যায়নি।', 502],
+  RATE_LIMITED: ['RATE_LIMITED', 'অনেক বেশি অনুরোধ। একটু পরে আবার চেষ্টা করুন।', 429],
 };
 
 function failure(code: string, message: string, status: number, requestId: string): Response {
@@ -34,13 +34,13 @@ function failure(code: string, message: string, status: number, requestId: strin
 
 function mapError(error: unknown): readonly [string, string, number] {
   if (error instanceof DOMException && error.name === 'TimeoutError') {
-    return ['UPSTREAM_TIMEOUT', 'The article request timed out.', 504];
+    return ['UPSTREAM_TIMEOUT', 'সংবাদ আনতে সময় শেষ হয়ে গেছে।', 504];
   }
   if (error instanceof Error && (error.name === 'TimeoutError' || error.message.includes('timeout'))) {
-    return ['UPSTREAM_TIMEOUT', 'The article request timed out.', 504];
+    return ['UPSTREAM_TIMEOUT', 'সংবাদ আনতে সময় শেষ হয়ে গেছে।', 504];
   }
   const code = error instanceof Error ? error.message : 'UPSTREAM_ERROR';
-  return messages[code] ?? ['UPSTREAM_ERROR', 'The article could not be loaded.', 502];
+  return messages[code] ?? ['UPSTREAM_ERROR', 'সংবাদটি লোড করা যায়নি।', 502];
 }
 
 export const POST: APIRoute = async ({ request, clientAddress }) => {
@@ -61,10 +61,10 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
     try {
       body = await request.json();
     } catch {
-      return failure('INVALID_REQUEST', 'Enter a valid article URL.', 400, requestId);
+      return failure('INVALID_REQUEST', 'সঠিক সংবাদের লিংক দিন।', 400, requestId);
     }
     const parsed = requestSchema.safeParse(body);
-    if (!parsed.success) return failure('INVALID_REQUEST', 'Enter a valid article URL.', 400, requestId);
+    if (!parsed.success) return failure('INVALID_REQUEST', 'সঠিক সংবাদের লিংক দিন।', 400, requestId);
 
     const startUrl = normalizeArticleUrl(parsed.data.url);
 
@@ -76,7 +76,7 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
       if (limiter?.limit) {
         const clientIp = request.headers.get('cf-connecting-ip') ?? clientAddress ?? 'unknown';
         const result = await limiter.limit({ key: `article:${clientIp}` });
-        if (!result.success) return failure('RATE_LIMITED', 'Too many requests. Try again shortly.', 429, requestId);
+        if (!result.success) return failure('RATE_LIMITED', 'অনেক বেশি অনুরোধ। একটু পরে আবার চেষ্টা করুন।', 429, requestId);
       }
     } catch {
       // Limiter failures must not break the endpoint; continue with logging.
@@ -88,7 +88,7 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
     const cacheKey = await hashedArticleCacheKey(startUrl.href);
     let cache: Cache | undefined;
     try {
-      cache = await caches.open('star-photocard-article-v1');
+      cache = await caches.open('star-photocard-article-v2');
       const hit = await matchCache(cache, cacheKey);
       if (hit) {
         const payload = (await hit.json()) as { data?: Record<string, unknown> };
@@ -123,7 +123,9 @@ export const POST: APIRoute = async ({ request, clientAddress }) => {
     }
 
     const data = {
-      canonicalUrl: fetched.url.href,
+      // <link rel=canonical> → og:url → final post-redirect URL. The editor's QR encodes this.
+      canonicalUrl: article.canonicalUrl ?? fetched.url.href,
+      category: article.category,
       title: article.title,
       publishedAt: article.publishedAt,
       formattedDate: article.formattedDate,

@@ -3,6 +3,8 @@ import {
   cleanTitle,
   detectLanguage,
   extractArticle,
+  extractCanonicalUrl,
+  extractCategory,
   extractImageCandidates,
   getBestSrcsetUrl,
   normalizeImageUrl,
@@ -98,7 +100,8 @@ describe('article extraction', () => {
       '<link rel="image_src" href="/relative.jpg">',
     ].join('');
     const candidates = extractImageCandidates(html, 'https://www.starnews.com.bd/article');
-    expect(candidates[0]).toBe('https://www.starnews.com.bd/secure.jpg');
+    // og:image now outranks og:image:secure_url.
+    expect(candidates.slice(0, 2)).toEqual(['https://www.starnews.com.bd/a.jpg', 'https://www.starnews.com.bd/secure.jpg']);
     expect(candidates).toContain('https://www.starnews.com.bd/relative.jpg');
     expect(new Set(candidates).size).toBe(candidates.length);
   });
@@ -232,5 +235,91 @@ describe('image tokens', () => {
     await expect(verifyImageToken(`${token}x`, secret)).rejects.toThrow();
     const expired = await signImageUrl('https://www.starnews.com.bd/a.jpg', secret, -60);
     await expect(verifyImageToken(expired, secret)).rejects.toThrow('TOKEN_EXPIRED');
+  });
+});
+
+describe('category, canonical URL and image priority', () => {
+  const article = new URL('https://starnews.com.bd/country/25787/some-story');
+  const menu = (href: string, text: string) =>
+    `<li class="uc-parent"><div class="mobile-menu-parent"><a href="${href}">${text}</a></div></li>`;
+
+  it('prefers article:section, then JSON-LD articleSection, then a validated menu link', () => {
+    const jsonLd = '<script type="application/ld+json">{"@type":"NewsArticle","articleSection":["সারাদেশ","x"]}</script>';
+    const menuLink = menu('https://starnews.com.bd/country', 'দেশ');
+    expect(extractCategory(`<meta property="article:section" content="রাজনীতি">${jsonLd}${menuLink}`, article)).toBe('রাজনীতি');
+    expect(extractCategory(`${jsonLd}${menuLink}`, article)).toBe('সারাদেশ');
+    expect(extractCategory(menuLink, article)).toBe('দেশ');
+  });
+
+  it('skips site-wide menu links outside the article section', () => {
+    const html = [
+      menu('https://starnews.com.bd/division/rangpur', 'রংপুর'), // first menu item, wrong section
+      menu('https://evil.test/country/x', 'ভুয়া'), // right path, wrong host
+      menu('/country/dhaka', 'ঢাকা &amp; আশপাশ'), // relative, same section
+    ].join('');
+    expect(extractCategory(html, article)).toBe('ঢাকা & আশপাশ');
+    expect(extractCategory(menu('https://starnews.com.bd/division/rangpur', 'রংপুর'), article)).toBeNull();
+    // The brief's example: a /division/ article accepts the /division/rangpur link.
+    expect(
+      extractCategory(menu('https://starnews.com.bd/division/rangpur', 'রংপুর'), new URL('https://starnews.com.bd/division/123/x')),
+    ).toBe('রংপুর');
+  });
+
+  it('matches the live site menu: multi-line markup and .html section links', () => {
+    // Shape copied from starnews.com.bd (2026-10-09): menu links end in .html.
+    const html = `
+      <li class="uc-parent">
+        <div class="mobile-menu-parent">
+          <a href="https://starnews.com.bd/districts.html">সারা দেশ</a>
+        </div>
+      </li>
+      <li class="uc-parent">
+        <div class="mobile-menu-parent">
+          <a href="https://starnews.com.bd/sports.html">
+              খেলা
+          </a>
+          <button type="button" class="mobile-submenu-toggle" aria-label="খেলা উপবিভাগ"></button>
+        </div>
+      </li>`;
+    expect(extractCategory(html, new URL('https://starnews.com.bd/sports/25803/story.html'))).toBe('খেলা');
+    // /country/ articles have no /country menu link on the live site → no category.
+    expect(extractCategory(html, new URL('https://starnews.com.bd/country/25807/story.html'))).toBeNull();
+  });
+
+  it('extracts the canonical URL: link rel=canonical, then og:url, else null', () => {
+    const page = new URL('https://www.starnews.com.bd/amp/country/25787');
+    expect(
+      extractCanonicalUrl(
+        '<link href="https://starnews.com.bd/country/25787/story" rel="canonical"><meta property="og:url" content="https://starnews.com.bd/og">',
+        page,
+      ),
+    ).toBe('https://starnews.com.bd/country/25787/story');
+    expect(extractCanonicalUrl('<meta property="og:url" content="/country/25787/story#top">', page)).toBe(
+      'https://www.starnews.com.bd/country/25787/story',
+    );
+    // Off-site or insecure canonicals are ignored (the QR must stay on Star News).
+    expect(extractCanonicalUrl('<link rel="canonical" href="https://evil.test/x">', page)).toBeNull();
+    expect(extractCanonicalUrl('<link rel="canonical" href="http://starnews.com.bd/x">', page)).toBeNull();
+    expect(extractCanonicalUrl('<p>none</p>', page)).toBeNull();
+    const full = extractArticle('<meta property="og:title" content="T"><link rel="canonical" href="https://starnews.com.bd/c">', page);
+    expect(full.canonicalUrl).toBe('https://starnews.com.bd/c');
+    expect(full.category).toBeNull();
+  });
+
+  it('orders images og:image, og:image:secure_url, twitter:image, then the old fallbacks', () => {
+    const html = [
+      '<meta name="twitter:image:src" content="https://starnews.com.bd/5.jpg">',
+      '<meta name="twitter:image" content="https://starnews.com.bd/4.jpg">',
+      '<meta property="og:image:secure_url" content="https://starnews.com.bd/3.jpg">',
+      '<meta property="og:image" content="https://starnews.com.bd/1.jpg">',
+      '<link rel="image_src" href="https://starnews.com.bd/6.jpg">',
+    ].join('');
+    expect(extractImageCandidates(html, article.href)).toEqual([
+      'https://starnews.com.bd/1.jpg',
+      'https://starnews.com.bd/3.jpg',
+      'https://starnews.com.bd/4.jpg',
+      'https://starnews.com.bd/5.jpg',
+      'https://starnews.com.bd/6.jpg',
+    ]);
   });
 });
