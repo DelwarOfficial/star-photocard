@@ -159,6 +159,9 @@ export function adSlotStyle(template: TemplateDefinition): LayerStyle {
     height: slot.height,
     overflow: 'hidden',
     background: '#ffffff',
+    // Above the artwork (.card-template is z-index 5), below the text layers (10+).
+    // The export has no z-index stacking: it appends the slot after the artwork instead.
+    zIndex: 6,
   };
 }
 

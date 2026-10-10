@@ -2,7 +2,7 @@ import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { AD_CREATIVE_SIZE, AD_STRIP_HEIGHT, adSlot, CARD_HEIGHT, CARD_WIDTH, EXPORT_SCALE, resolveTemplate, templates } from '../../src/config/templates';
-import { adCreativeStyle } from '../../src/lib/card/layerStyles';
+import { adCreativeStyle, adSlotStyle } from '../../src/lib/card/layerStyles';
 import { cardReducer } from '../../src/lib/card/reducer';
 import { createCardState, layoutDefaults } from '../../src/lib/card/types';
 
@@ -51,6 +51,11 @@ describe('ad registry', () => {
 });
 
 describe('ad creative fit', () => {
+  it('the slot paints above the artwork (z 5) and below the text layers (10+)', () => {
+    const z = adSlotStyle(templates[0]!).zIndex as number;
+    expect(z).toBeGreaterThan(5);
+    expect(z).toBeLessThan(10);
+  });
   const slot = adSlot(templates[0]!);
   it('a 1600 × 148 creative fills the strip edge to edge', () => {
     const s = adCreativeStyle(templates[0]!, AD);

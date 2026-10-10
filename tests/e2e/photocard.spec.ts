@@ -575,6 +575,14 @@ test.describe('photocard generator', () => {
         slotTop: (el.parentElement as HTMLElement).offsetTop,
       }));
       expect(box).toMatchObject({ left: 0, top: 0, width: 1080, height: 100, slotTop: 1250 });
+      // Preview paint order: the creative is the topmost element over the strip, not the artwork.
+      await page.locator('.card-ad img').scrollIntoViewIfNeeded();
+      const topmost = await page.locator('.card-ad img').evaluate((el: HTMLElement) => {
+        const r = el.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return hit === el;
+      });
+      expect(topmost).toBe(true);
       // Export: still 1600 × 2000; the strip's corners and centre are the creative, the card above is not.
       const px = await exportPixels(page, [
         { x: 1, y: 1251 }, { x: 1078, y: 1348 }, { x: 540, y: 1300 }, { x: 540, y: 1240 },
