@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { AD_CREATIVE_SIZE, AD_STRIP_HEIGHT, adSlot, CARD_HEIGHT, CARD_WIDTH, EXPORT_SCALE, resolveTemplate, templates } from '../../src/config/templates';
@@ -6,13 +6,17 @@ import { adCreativeStyle } from '../../src/lib/card/layerStyles';
 import { cardReducer } from '../../src/lib/card/reducer';
 import { createCardState, layoutDefaults } from '../../src/lib/card/types';
 
+// Exact-case listing: existsSync is case-insensitive on Windows/macOS, but the Workers asset server is not.
+const TEMPLATE_FILES = readdirSync(fileURLToPath(new URL('../../public/templates', import.meta.url)));
+const served = (path: string) => TEMPLATE_FILES.includes(path.replace('/templates/', ''));
+
 const AD = { src: 'blob:ad', width: AD_CREATIVE_SIZE.width, height: AD_CREATIVE_SIZE.height };
 
 describe('ad registry', () => {
   it('every template has an existing ad artwork and the one strip height', () => {
     expect(templates).toHaveLength(6);
     for (const t of templates) {
-      expect(existsSync(fileURLToPath(new URL(`../../public${t.ad.artwork}`, import.meta.url))), t.ad.artwork).toBe(true);
+      for (const path of [t.src, t.thumbnail, t.ad.artwork]) expect(served(path), `${path} (exact case)`).toBe(true);
       expect(t.ad.stripHeight).toBe(AD_STRIP_HEIGHT);
     }
   });

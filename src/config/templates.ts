@@ -205,8 +205,8 @@ export const templates: readonly TemplateDefinition[] = [
   {
     id: 'special-card-top',
     label: 'Full photo, headline on top',
-    src: '/templates/Special-card-top.png',
-    thumbnail: '/templates/Special-card-top.png',
+    src: '/templates/special-card-top.png',
+    thumbnail: '/templates/special-card-top.png',
     language: 'bn',
     mode: 'article',
     requiresImage: false,
@@ -236,8 +236,8 @@ export const templates: readonly TemplateDefinition[] = [
   {
     id: 'special-card-bottom',
     label: 'Full photo, headline at bottom',
-    src: '/templates/Special-card-bottom.png',
-    thumbnail: '/templates/Special-card-bottom.png',
+    src: '/templates/special-card-bottom.png',
+    thumbnail: '/templates/special-card-bottom.png',
     language: 'bn',
     mode: 'article',
     requiresImage: false,
@@ -302,8 +302,8 @@ export const templates: readonly TemplateDefinition[] = [
   {
     id: 'breaking-news',
     label: 'Breaking News',
-    src: '/templates/Breaking_NEWS.png',
-    thumbnail: '/templates/Breaking_NEWS.png',
+    src: '/templates/breaking_news.png',
+    thumbnail: '/templates/breaking_news.png',
     language: 'bn',
     mode: 'custom',
     requiresImage: false,

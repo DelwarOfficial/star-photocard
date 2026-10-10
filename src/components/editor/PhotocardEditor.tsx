@@ -355,12 +355,17 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
   const chooseAdImage = useCallback(
     async (file: File | undefined) => {
       if (!file) return;
+      // A rejected file must not stay named in the input as if it were the creative.
+      const reject = (message: string) => {
+        if (adInputRef.current) adInputRef.current.value = '';
+        announce('error', message);
+      };
       if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-        announce('error', S.ad.badFile);
+        reject(S.ad.badFile);
         return;
       }
       if (file.size > 8 * 1024 * 1024) {
-        announce('error', S.status.tooBig);
+        reject(S.status.tooBig);
         return;
       }
       const objectUrl = URL.createObjectURL(file);
@@ -369,7 +374,7 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
         img = await decodeImage(objectUrl);
       } catch {
         URL.revokeObjectURL(objectUrl);
-        announce('error', S.ad.badFile);
+        reject(S.ad.badFile);
         return;
       }
       if (adUrlRef.current) URL.revokeObjectURL(adUrlRef.current);
@@ -406,6 +411,7 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
       URL.revokeObjectURL(adUrlRef.current);
       adUrlRef.current = undefined;
     }
+    if (adInputRef.current) adInputRef.current.value = '';
     abortRef.current?.abort();
     requestSeq.current += 1;
     setLastRemoteImage(null);
@@ -987,10 +993,12 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
                   aria-describedby="ad-help"
-                  onChange={(e) => {
-                    void chooseAdImage(e.target.files?.[0]);
-                    e.target.value = '';
+                  // Keep the chosen file's name on screen; clear only when opening the picker,
+                  // so choosing the same file again still fires onChange.
+                  onClick={(e) => {
+                    e.currentTarget.value = '';
                   }}
+                  onChange={(e) => void chooseAdImage(e.target.files?.[0])}
                 />
               </div>
               <small id="ad-help">{S.ad.help(AD_CREATIVE_SIZE.width, AD_CREATIVE_SIZE.height)}</small>

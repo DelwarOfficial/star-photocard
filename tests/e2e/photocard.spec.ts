@@ -544,6 +544,10 @@ test.describe('photocard generator', () => {
   });
 
   test('ad strip: every template swaps to its ad artwork and fits the creative edge to edge; reset clears it', async ({ page }) => {
+    // Every request in the ad flow (all six ad artworks, the creative) must succeed.
+    const failed: string[] = [];
+    page.on('response', (r) => { if (r.status() >= 400) failed.push(`${r.status()} ${r.url()}`); });
+    page.on('requestfailed', (r) => { if (!r.url().startsWith('blob:')) failed.push(`failed ${r.url()}`); });
     await mockArticle(page, {});
     await generate(page);
     const creative = await solidPng(page, '#ff00ff', 1600, 148); // the recommended size
@@ -552,6 +556,8 @@ test.describe('photocard generator', () => {
     const [chooser] = await Promise.all([page.waitForEvent('filechooser'), toggle.click()]);
     await chooser.setFiles(creative);
     await expect(toggle).toBeChecked();
+    // The input keeps showing the chosen file (it used to snap back to "No file chosen").
+    await expect(page.locator('#ad-image')).toHaveValue(/solid\.png$/);
     await expect(page.locator('.card-ad img')).toBeVisible();
 
     const count = 6;
@@ -588,6 +594,8 @@ test.describe('photocard generator', () => {
     await page.getByRole('button', { name: 'Reset', exact: true }).click();
     await expect(toggle).not.toBeChecked();
     await expect(page.locator('.card-ad')).toHaveCount(0);
+    await expect(page.locator('#ad-image')).toHaveValue('');
+    expect(failed).toEqual([]);
     await expect(page.locator('.card-template')).not.toHaveAttribute('src', /\/templates\/ad-/);
   });
 
