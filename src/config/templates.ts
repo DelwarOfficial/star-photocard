@@ -228,7 +228,7 @@ export const templates: readonly TemplateDefinition[] = [
     qr: qrAt(1067, 1794),
     metaRows: 3,
     // Ad art: the photo stops at the strip; headline unchanged, credit follows the footer up.
-    ad: adVariant('/templates/ad-Special-card-top.png', {
+    ad: adVariant('/templates/ad-special-card-top.png', {
       photo: rect(0, 0, 1600, 1852),
       photoCredit: creditAt(32, 1690 - AD_STRIP_ARTWORK),
     }),
