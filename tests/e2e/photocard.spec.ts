@@ -107,16 +107,16 @@ async function exportPixels(page: Page, points: Array<{ x: number; y: number }>)
 }
 
 /** A solid-colour PNG generated in the page, for upload tests. */
-async function solidPng(page: Page, color: string): Promise<{ name: string; mimeType: string; buffer: Buffer }> {
-  const b64 = await page.evaluate((fill) => {
+async function solidPng(page: Page, color: string, width = 1600, height = 1000): Promise<{ name: string; mimeType: string; buffer: Buffer }> {
+  const b64 = await page.evaluate(({ fill, width, height }) => {
     const canvas = document.createElement('canvas');
-    canvas.width = 1600;
-    canvas.height = 1000;
+    canvas.width = width;
+    canvas.height = height;
     const ctx = canvas.getContext('2d')!;
     ctx.fillStyle = fill;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     return canvas.toDataURL('image/png').split(',')[1]!;
-  }, color);
+  }, { fill: color, width, height });
   return { name: 'solid.png', mimeType: 'image/png', buffer: Buffer.from(b64, 'base64') };
 }
 
@@ -474,7 +474,7 @@ test.describe('photocard generator', () => {
     await open(page);
     await pickTemplate(page, /Breaking News/);
     await expect(page.getByLabel('Star News article link')).toHaveCount(0);
-    await expect(page.locator('input[type=file]')).toHaveCount(0);
+    await expect(page.locator('input[type=file]:not(#ad-image)')).toHaveCount(0);
     await expect(page.locator('.photo-window')).toHaveCount(0);
     await expect(page.locator('.card-date')).toHaveText(todayBanglaDate());
     await expect(page.getByRole('button', { name: 'Download PNG' })).toBeDisabled();
@@ -541,6 +541,54 @@ test.describe('photocard generator', () => {
       expect(loaded).toBe(true);
       expect(await downloadPng(page)).toMatchObject({ width: CARD_W, height: CARD_H });
     }
+  });
+
+  test('ad strip: every template swaps to its ad artwork and fits the creative edge to edge; reset clears it', async ({ page }) => {
+    await mockArticle(page, {});
+    await generate(page);
+    const creative = await solidPng(page, '#ff00ff', 1600, 148); // the recommended size
+    const toggle = page.getByLabel('Ad strip at the bottom');
+    // No creative yet: the toggle asks for one, and ad mode turns on once it is chosen.
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), toggle.click()]);
+    await chooser.setFiles(creative);
+    await expect(toggle).toBeChecked();
+    await expect(page.locator('.card-ad img')).toBeVisible();
+
+    const count = 6;
+    for (let i = 0; i < count; i += 1) {
+      await pickerButton(page).click();
+      await page.getByRole('listbox').getByRole('option').nth(i).click();
+      if (await page.getByLabel(/^Photo \(required/).count()) {
+        await page.getByLabel(/^Photo \(required/).setInputFiles(UPLOAD_PHOTO);
+      }
+      await expect(toggle).toBeChecked();
+      await expect(page.locator('.card-template')).toHaveAttribute('src', /\/templates\/ad-/);
+      // Preview: the slot is full width × 100 layout px at the bottom, creative edge to edge.
+      const box = await page.locator('.card-ad img').evaluate((el: HTMLElement) => ({
+        left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight,
+        slotTop: (el.parentElement as HTMLElement).offsetTop,
+      }));
+      expect(box).toMatchObject({ left: 0, top: 0, width: 1080, height: 100, slotTop: 1250 });
+      // Export: still 1600 × 2000; the strip's corners and centre are the creative, the card above is not.
+      const px = await exportPixels(page, [
+        { x: 1, y: 1251 }, { x: 1078, y: 1348 }, { x: 540, y: 1300 }, { x: 540, y: 1240 },
+      ]);
+      for (const p of px.slice(0, 3)) expect(p).toEqual([255, 0, 255]);
+      expect(px[3]).not.toEqual([255, 0, 255]);
+      expect(await downloadPng(page)).toMatchObject({ width: CARD_W, height: CARD_H });
+    }
+
+    await toggle.click();
+    await expect(page.locator('.card-template')).not.toHaveAttribute('src', /\/templates\/ad-/);
+    await expect(page.locator('.card-ad')).toHaveCount(0);
+    await toggle.click(); // creative kept: back on without re-uploading
+    await expect(page.locator('.card-ad img')).toBeVisible();
+
+    page.once('dialog', (dialog) => void dialog.accept());
+    await page.getByRole('button', { name: 'Reset', exact: true }).click();
+    await expect(toggle).not.toBeChecked();
+    await expect(page.locator('.card-ad')).toHaveCount(0);
+    await expect(page.locator('.card-template')).not.toHaveAttribute('src', /\/templates\/ad-/);
   });
 
   test('dragging empty card space moves nothing; dragging the headline moves only it', async ({ page }) => {
@@ -753,7 +801,7 @@ test.describe('photocard generator', () => {
     await expect(page.getByRole('status')).toContainText('latest edits');
     await releaseAfterEdit(0);
     await startRequest(2);
-    await page.locator('input[type="file"]').setInputFiles(UPLOAD_PHOTO);
+    await page.locator('#local-image').setInputFiles(UPLOAD_PHOTO);
     const uploadedSrc = await page.locator('.photo').getAttribute('src');
     await releaseAfterEdit(1);
     await expect(page.locator('.photo')).toHaveAttribute('src', uploadedSrc!);

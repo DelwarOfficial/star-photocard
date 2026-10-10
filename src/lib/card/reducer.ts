@@ -1,6 +1,6 @@
-import { getTemplate } from '../../config/templates';
+import { getTemplate, resolveTemplate, type TemplateDefinition } from '../../config/templates';
 import { limitTagInput, normalizePhotoTag } from './photoTag';
-import { createCardState, layoutDefaults, type CardState } from './types';
+import { createCardState, layoutDefaults, type AdImage, type CardState } from './types';
 
 export type CardAction =
   | Readonly<{ type: 'SET_SOURCE_URL'; url: string }>
@@ -29,6 +29,10 @@ export type CardAction =
   | Readonly<{ type: 'SET_TITLE_POSITION'; position: CardState['titlePosition'] }>
   | Readonly<{ type: 'SET_QR_POSITION'; position: CardState['qrPosition'] }>
   | Readonly<{ type: 'SET_QR_VISIBLE'; visible: boolean }>
+  /** Ad mode never turns on without a creative, so the exported strip is never empty. */
+  | Readonly<{ type: 'SET_AD_VISIBLE'; visible: boolean }>
+  /** A new creative also switches ad mode on. */
+  | Readonly<{ type: 'SET_AD_IMAGE'; image: AdImage }>
   | Readonly<{ type: 'SET_LOCAL_IMAGE'; src: string }>
   | Readonly<{ type: 'RESTORE_REMOTE_IMAGE'; src: string; kind: CardState['image']['kind'] }>
   | Readonly<{ type: 'SWITCH_TEMPLATE'; templateId: string }>
@@ -54,6 +58,35 @@ export function clampZoom(scale: number): number {
   // Round to the step so repeated +/- never accumulates float drift (1.1 + 0.1 = 1.2000000000000002).
   const stepped = Math.round(scale / ZOOM_STEP) * ZOOM_STEP;
   return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Number(stepped.toFixed(2))));
+}
+
+/** The template as drawn for this state (ad artwork and boxes when ad mode is on). */
+function activeTemplate(state: CardState, templateId = state.templateId): TemplateDefinition {
+  return resolveTemplate(getTemplate(templateId), state.adVisible);
+}
+
+/**
+ * Switch ad mode, moving the headline and QR with the artwork: each keeps the user's
+ * nudge relative to its default spot (the QR's default moves up by the strip height).
+ */
+function withAdMode(state: CardState, adVisible: boolean): CardState {
+  if (adVisible === state.adVisible) return state;
+  const from = layoutDefaults(activeTemplate(state));
+  const to = layoutDefaults(activeTemplate({ ...state, adVisible }));
+  const move = (p: CardState['titlePosition'], a: CardState['titlePosition'], b: CardState['titlePosition']) => ({
+    x: p.x + b.x - a.x,
+    y: p.y + b.y - a.y,
+  });
+  return {
+    ...state,
+    adVisible,
+    titlePosition: move(state.titlePosition, from.titlePosition, to.titlePosition),
+    qrPosition: move(state.qrPosition, from.qrPosition, to.qrPosition),
+    // Photo windows differ between the two artworks; start the framing fresh.
+    imageScale: 1,
+    photoPosition: { x: 0, y: 0 },
+    isDirty: true,
+  };
 }
 
 export function cardReducer(state: CardState, action: CardAction): CardState {
@@ -108,6 +141,11 @@ export function cardReducer(state: CardState, action: CardAction): CardState {
       return { ...state, qrPosition: action.position, isDirty: true };
     case 'SET_QR_VISIBLE':
       return { ...state, qrVisible: action.visible, isDirty: true };
+    case 'SET_AD_VISIBLE':
+      if (action.visible && !state.adImage) return state;
+      return withAdMode(state, action.visible);
+    case 'SET_AD_IMAGE':
+      return { ...withAdMode(state, true), adImage: action.image, isDirty: true };
     case 'SET_LOCAL_IMAGE':
       return {
         ...state,
@@ -127,7 +165,7 @@ export function cardReducer(state: CardState, action: CardAction): CardState {
       };
     case 'SWITCH_TEMPLATE': {
       // Layer positions are template-specific; carrying them over misplaces layers.
-      const template = getTemplate(action.templateId);
+      const template = activeTemplate(state, action.templateId);
       return {
         ...state,
         templateId: template.id,
@@ -138,7 +176,7 @@ export function cardReducer(state: CardState, action: CardAction): CardState {
       };
     }
     case 'RESET_LAYOUT': {
-      const template = getTemplate(state.templateId);
+      const template = activeTemplate(state);
       return {
         ...state,
         ...layoutDefaults(template),
@@ -151,7 +189,7 @@ export function cardReducer(state: CardState, action: CardAction): CardState {
     case 'RESET_PHOTO':
       return { ...state, imageScale: 1, photoPosition: { x: 0, y: 0 }, isDirty: true };
     case 'RESET_TITLE': {
-      const template = getTemplate(state.templateId);
+      const template = activeTemplate(state);
       return {
         ...state,
         titlePosition: layoutDefaults(template).titlePosition,
@@ -160,7 +198,7 @@ export function cardReducer(state: CardState, action: CardAction): CardState {
       };
     }
     case 'RESET_QR': {
-      const template = getTemplate(state.templateId);
+      const template = activeTemplate(state);
       return {
         ...state,
         qrPosition: layoutDefaults(template).qrPosition,

@@ -161,6 +161,14 @@ export const S = {
     altCustom: 'QR code linking to starnews.com.bd',
   },
   layoutReset: 'Reset layout to the template defaults',
+  ad: {
+    toggle: 'Ad strip at the bottom',
+    upload: 'Ad creative (JPG, PNG or WebP, up to 8 MB)',
+    help: (w: number, h: number) => `Recommended size ${w} × ${h}. It’s fitted into the strip without cropping; it stays in this browser.`,
+    badFile: 'Please choose a JPG, PNG or WebP ad creative.',
+    loaded: 'Ad creative added — the ad strip is on.',
+    alt: 'Ad creative',
+  },
   export: {
     download: 'Download PNG',
     downloading: 'Exporting…',
@@ -195,6 +203,7 @@ export const S = {
     exportPhoto:
       'We couldn’t load the card photo (article photo links expire after 10 minutes). Click Generate again or use your own photo, then try again.',
     exportTemplate: 'We couldn’t load the template artwork. Pick another template or reload the page.',
+    exportAd: 'We couldn’t load the ad creative. Choose it again, then try again.',
     exportFailed: (action: 'download' | 'copy') => `Export didn’t work. Check the photo and try to ${action} again.`,
   },
   /** Messages returned by /api/article; shown as-is in the status line. */

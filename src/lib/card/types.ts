@@ -3,6 +3,9 @@ import { todayBanglaDate } from '../text/dates';
 
 export type ImageKind = 'fallback' | 'remote' | 'local';
 
+/** Uploaded ad creative: a browser-only object URL plus its intrinsic size (for the fit math). */
+export type AdImage = Readonly<{ src: string; width: number; height: number }>;
+
 export type CardState = Readonly<{
   sourceUrl: string;
   /** Canonical URL of the last successfully fetched article; the QR encodes this, never raw input. */
@@ -26,6 +29,9 @@ export type CardState = Readonly<{
   titlePosition: Point;
   qrPosition: Point;
   qrVisible: boolean;
+  /** Ad mode: ad artwork + creative strip. Only ever true while adImage is set. */
+  adVisible: boolean;
+  adImage: AdImage | null;
   loadStatus: 'idle' | 'loading' | 'ready' | 'error';
   isDirty: boolean;
 }>;
@@ -64,6 +70,8 @@ const baseCardState: CardState = {
   photoPosition: { x: 0, y: 0 },
   ...layoutDefaults(defaultTemplate),
   qrVisible: true,
+  adVisible: false,
+  adImage: null,
   loadStatus: 'idle',
   isDirty: false,
 };

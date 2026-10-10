@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { EXPORT_HEIGHT, EXPORT_SCALE, EXPORT_WIDTH, getTemplate, SITE_URL, type TemplateDefinition } from '../../config/templates';
+import { AD_CREATIVE_SIZE, EXPORT_HEIGHT, EXPORT_SCALE, EXPORT_WIDTH, getTemplate, resolveTemplate, SITE_URL, type TemplateDefinition } from '../../config/templates';
 import { tokenizeTitle } from '../../lib/card/highlightTitle';
 import { defaultRenderer } from '../../lib/card/html2canvasRenderer';
 import { clampPhotoOffset, clampToCanvas, effectivePhotoFit, previewScale } from '../../lib/card/geometry';
@@ -8,7 +8,7 @@ import { CATEGORY_PRESETS, hasTag, PHOTO_CREDIT_PRESETS, PHOTO_TAG_MAX_LENGTH } 
 import { cardReducer, type CardAction, clampZoom, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from '../../lib/card/reducer';
 import { decodeImage, downloadFilename, isClipboardSupported } from '../../lib/card/renderer';
 import { titleFits } from '../../lib/card/titleBounds';
-import { CARD_TEXT_WEIGHT, canvasTextMeasure, cardFontFamily, creditStyle, fitPillFontSize, highlightColor, pillStyle, qrStyle, dateStyle, titleStyle } from '../../lib/card/layerStyles';
+import { adCreativeStyle, adSlotStyle, CARD_TEXT_WEIGHT, canvasTextMeasure, cardFontFamily, creditStyle, fitPillFontSize, highlightColor, pillStyle, qrStyle, dateStyle, titleStyle } from '../../lib/card/layerStyles';
 import { createCardState, FALLBACK_IMAGE_SRC } from '../../lib/card/types';
 import { todayBanglaDate } from '../../lib/text/dates';
 import { S, UI_LANG, type LayerKey } from '../../lib/i18n/strings';
@@ -66,6 +66,7 @@ function exportFailureMessage(err: unknown, action: 'download' | 'copy'): string
     return S.status.exportPhoto;
   }
   if (code === 'TEMPLATE_UNAVAILABLE') return S.status.exportTemplate;
+  if (code === 'AD_UNAVAILABLE') return S.status.exportAd;
   return S.status.exportFailed(action);
 }
 
@@ -107,6 +108,8 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
   const requestSeq = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const localUrlRef = useRef<string | undefined>(undefined);
+  const adUrlRef = useRef<string | undefined>(undefined);
+  const adInputRef = useRef<HTMLInputElement>(null);
   const remoteUrlRef = useRef<string | undefined>(undefined);
   const previewFrameRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLDivElement>(null);
@@ -123,7 +126,8 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
     }
     rawDispatch(action);
   }, []);
-  const template = useMemo(() => getTemplate(card.templateId), [card.templateId]);
+  // The template as drawn: ad mode swaps in the ad artwork and its re-measured boxes.
+  const template = useMemo(() => resolveTemplate(getTemplate(card.templateId), card.adVisible), [card.templateId, card.adVisible]);
   useEffect(() => {
     let cancelled = false;
     const family = cardFontFamily(card.language);
@@ -219,6 +223,7 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
     () => () => {
       if (localUrlRef.current) URL.revokeObjectURL(localUrlRef.current);
       if (remoteUrlRef.current) URL.revokeObjectURL(remoteUrlRef.current);
+      if (adUrlRef.current) URL.revokeObjectURL(adUrlRef.current);
       abortRef.current?.abort();
     },
     [],
@@ -345,6 +350,36 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
     [announce],
   );
 
+  // Ad creative: same object-URL lifecycle as the photo upload. Decoded first so the fit
+  // math has its real size; choosing one also switches ad mode on (never an empty strip).
+  const chooseAdImage = useCallback(
+    async (file: File | undefined) => {
+      if (!file) return;
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+        announce('error', S.ad.badFile);
+        return;
+      }
+      if (file.size > 8 * 1024 * 1024) {
+        announce('error', S.status.tooBig);
+        return;
+      }
+      const objectUrl = URL.createObjectURL(file);
+      let img: HTMLImageElement;
+      try {
+        img = await decodeImage(objectUrl);
+      } catch {
+        URL.revokeObjectURL(objectUrl);
+        announce('error', S.ad.badFile);
+        return;
+      }
+      if (adUrlRef.current) URL.revokeObjectURL(adUrlRef.current);
+      adUrlRef.current = objectUrl;
+      dispatch({ type: 'SET_AD_IMAGE', image: { src: objectUrl, width: img.naturalWidth, height: img.naturalHeight } });
+      announce('success', S.ad.loaded);
+    },
+    [announce, dispatch],
+  );
+
   const restoreArticleImage = useCallback(() => {
     if (!lastRemoteImage) {
       announce('info', S.status.noArticlePhoto);
@@ -366,6 +401,10 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
     if (localUrlRef.current) {
       URL.revokeObjectURL(localUrlRef.current);
       localUrlRef.current = undefined;
+    }
+    if (adUrlRef.current) {
+      URL.revokeObjectURL(adUrlRef.current);
+      adUrlRef.current = undefined;
     }
     abortRef.current?.abort();
     requestSeq.current += 1;
@@ -924,6 +963,37 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
                   <label htmlFor="qr-visible">{isArticle ? S.qr.toggleArticle : S.qr.toggleCustom}</label>
                 </div>
               )}
+              <div className="qr-toggle">
+                <input
+                  id="ad-visible"
+                  type="checkbox"
+                  role="switch"
+                  className="switch"
+                  checked={card.adVisible}
+                  aria-describedby="ad-help"
+                  onChange={(e) => {
+                    // No creative yet: ask for one first; ad mode turns on once it is chosen.
+                    if (e.target.checked && !card.adImage) adInputRef.current?.click();
+                    else dispatch({ type: 'SET_AD_VISIBLE', visible: e.target.checked });
+                  }}
+                />
+                <label htmlFor="ad-visible">{S.ad.toggle}</label>
+              </div>
+              <div hidden={!card.adVisible}>
+                <label htmlFor="ad-image">{S.ad.upload}</label>
+                <input
+                  id="ad-image"
+                  ref={adInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  aria-describedby="ad-help"
+                  onChange={(e) => {
+                    void chooseAdImage(e.target.files?.[0]);
+                    e.target.value = '';
+                  }}
+                />
+              </div>
+              <small id="ad-help">{S.ad.help(AD_CREATIVE_SIZE.width, AD_CREATIVE_SIZE.height)}</small>
               <button type="button" className="button ghost" onClick={() => dispatch({ type: 'RESET_LAYOUT' })}>
                 <Icon name="reset" size={18} />
                 {S.layoutReset}
@@ -1014,6 +1084,11 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
                   </DraggableLayer>
                 )}
                 <img className="card-template" src={template.src} alt="" draggable={false} />
+                {card.adVisible && card.adImage && (
+                  <div className="card-ad" style={adSlotStyle(template) as React.CSSProperties}>
+                    <img src={card.adImage.src} alt={S.ad.alt} draggable={false} style={adCreativeStyle(template, card.adImage) as React.CSSProperties} />
+                  </div>
+                )}
                 {/* A render that straddles Dhaka midnight may differ by a day; the client value wins. */}
                 <div className="card-date" style={dateStyle(template) as React.CSSProperties} >
                   {card.publicationDate}

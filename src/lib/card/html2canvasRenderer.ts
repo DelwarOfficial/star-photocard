@@ -1,10 +1,10 @@
 import html2canvas from 'html2canvas';
-import { EXPORT_HEIGHT, EXPORT_WIDTH, getTemplate } from '../../config/templates';
+import { EXPORT_HEIGHT, EXPORT_WIDTH, getTemplate, resolveTemplate } from '../../config/templates';
 import { effectivePhotoFit, photoGeometry } from './geometry';
 import { titleFits } from './titleBounds';
 import { tokenizeTitle } from './highlightTitle';
 import { hasTag } from './photoTag';
-import { applyStyle, CARD_TEXT_WEIGHT, canvasTextMeasure, cardFontFamily, creditStyle, fitPillFontSize, dateStyle, highlightColor, pillStyle, qrStyle, titleStyle } from './layerStyles';
+import { adCreativeStyle, adSlotStyle, applyStyle, CARD_TEXT_WEIGHT, canvasTextMeasure, cardFontFamily, creditStyle, fitPillFontSize, dateStyle, highlightColor, pillStyle, qrStyle, titleStyle } from './layerStyles';
 import { decodeImage, waitForFonts, type CardRenderer, type ExportSnapshot } from './renderer';
 
 /**
@@ -29,7 +29,8 @@ export class Html2CanvasRenderer implements CardRenderer {
   readonly name = 'html2canvas';
 
   async render(snapshot: ExportSnapshot): Promise<Blob> {
-    const template = getTemplate(snapshot.state.templateId);
+    const template = resolveTemplate(getTemplate(snapshot.state.templateId), snapshot.state.adVisible);
+    const ad = snapshot.state.adVisible ? snapshot.state.adImage : null;
     const fontFamily = cardFontFamily(snapshot.state.language);
     await loadCardFonts(fontFamily);
     await waitForFonts();
@@ -45,6 +46,11 @@ export class Html2CanvasRenderer implements CardRenderer {
           })
         : Promise.resolve(null),
     ]);
+    if (ad) {
+      await decodeImage(ad.src).catch(() => {
+        throw new Error('AD_UNAVAILABLE');
+      });
+    }
     if (snapshot.qrDataUrl) {
       await decodeImage(snapshot.qrDataUrl).catch(() => undefined);
     }
@@ -88,6 +94,17 @@ export class Html2CanvasRenderer implements CardRenderer {
       overlay.src = templateImg.src;
       overlay.style.cssText = `position:absolute;inset:0;width:${canvasWidth}px;height:${canvasHeight}px;`;
       card.appendChild(overlay);
+
+      // Ad creative: fixed slot over the artwork's strip, fitted with the same math as the preview.
+      if (ad) {
+        const slot = document.createElement('div');
+        applyStyle(slot, adSlotStyle(template));
+        const creative = document.createElement('img');
+        creative.src = ad.src;
+        applyStyle(creative, adCreativeStyle(template, ad));
+        slot.appendChild(creative);
+        card.appendChild(slot);
+      }
 
       // Text layers share their styles with the preview (layerStyles.ts).
       const date = document.createElement('div');

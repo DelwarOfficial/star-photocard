@@ -1,5 +1,6 @@
-import type { TemplateDefinition } from '../../config/templates';
-import type { CardState } from './types';
+import { adSlot, type TemplateDefinition } from '../../config/templates';
+import { photoGeometry } from './geometry';
+import type { AdImage, CardState } from './types';
 
 /**
  * Single source of truth for the text/QR layer styles. The React preview
@@ -141,6 +142,37 @@ export function qrStyle(template: TemplateDefinition, state: CardState): LayerSt
     background: '#ffffff',
     borderRadius: QR_RADIUS,
     boxSizing: 'border-box',
+  };
+}
+
+/**
+ * Ad strip box: covers the artwork's placeholder text in white, so letterboxing reads as
+ * a clean white band. Fixed slot — no drag, zoom or offset.
+ */
+export function adSlotStyle(template: TemplateDefinition): LayerStyle {
+  const slot = adSlot(template);
+  return {
+    position: 'absolute',
+    left: slot.x,
+    top: slot.y,
+    width: slot.width,
+    height: slot.height,
+    overflow: 'hidden',
+    background: '#ffffff',
+  };
+}
+
+/** The creative fitted (`contain`, centred) into the slot; coordinates relative to the slot box. */
+export function adCreativeStyle(template: TemplateDefinition, image: AdImage): LayerStyle {
+  const slot = adSlot(template);
+  const drawn = photoGeometry(image, slot, 1, { x: 0, y: 0 }, 'contain');
+  return {
+    position: 'absolute',
+    left: drawn.x - slot.x,
+    top: drawn.y - slot.y,
+    width: drawn.width,
+    height: drawn.height,
+    maxWidth: 'none',
   };
 }
 
