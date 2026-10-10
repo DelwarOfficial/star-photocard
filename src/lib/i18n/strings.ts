@@ -53,6 +53,7 @@ export const S = {
     label: 'Keyboard shortcuts',
     generate: 'Generate',
     download: 'Download',
+    copy: 'Copy',
     reset: 'Reset',
     nudge: 'Nudge layer',
   },

@@ -533,10 +533,10 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
   const resetLayer = (layer: LayerKey) =>
     dispatch({ type: layer === 'photo' ? 'RESET_PHOTO' : layer === 'title' ? 'RESET_TITLE' : 'RESET_QR' });
 
-  // Keyboard shortcuts: G generate, D download, R reset, arrows nudge the selected layer.
+  // Keyboard shortcuts: G generate, D download, C copy, R reset, arrows nudge the selected layer.
   // Ignored while typing in a field, inside the template list, or with a modifier held.
-  const shortcutRef = useRef({ generate, download, fullReset, nudge, activeLayer, isArticle, canExport, shortcutsEnabled, exporting });
-  shortcutRef.current = { generate, download, fullReset, nudge, activeLayer, isArticle, canExport, shortcutsEnabled, exporting };
+  const shortcutRef = useRef({ generate, download, copy, fullReset, nudge, activeLayer, isArticle, canExport, shortcutsEnabled, exporting });
+  shortcutRef.current = { generate, download, copy, fullReset, nudge, activeLayer, isArticle, canExport, shortcutsEnabled, exporting };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -547,6 +547,7 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
       const key = e.key.toLowerCase();
       if (key === 'g' && k.isArticle) void k.generate();
       else if (key === 'd' && k.canExport) void k.download();
+      else if (key === 'c' && k.canExport) void k.copy();
       else if (key === 'r') k.fullReset();
       else if (e.key.startsWith('Arrow')) {
         const step = e.shiftKey ? 10 : 1;
@@ -949,6 +950,7 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
                   className="button secondary"
                   disabled={!canExport || exporting !== 'idle'}
                   onClick={() => void copy()}
+                  aria-keyshortcuts="C"
                   title={clipboardSupported ? S.export.copyTitle : S.export.copyUnsupportedTitle}
                 >
                   {exporting === 'copy' ? <span className="spinner" aria-hidden="true" /> : <Icon name="copy" size={18} />}
@@ -1092,6 +1094,9 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
             )}
             <span>
               <kbd>D</kbd> {S.shortcuts.download}
+            </span>
+            <span>
+              <kbd>C</kbd> {S.shortcuts.copy}
             </span>
             <span>
               <kbd>R</kbd> {S.shortcuts.reset}
