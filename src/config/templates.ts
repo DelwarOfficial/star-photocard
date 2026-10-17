@@ -108,12 +108,20 @@ const BLACK = '#000000';
 
 /** Date text starts right of the baked calendar icon (icon x ≈ 1238–1265). */
 const dateAt = (top: number) => ({ x: a(1284), y: a(top), width: a(300), fontSize: a(30) });
-const title = (x: number, y: number, width: number, fontSize: number) => ({
+/**
+ * Headline size range in layout px. 75 is every template's default: about two lines for a
+ * typical headline in the widened boxes below; larger sizes or longer headlines wrap to three.
+ */
+export const TITLE_FONT_MIN = 30;
+export const TITLE_FONT_MAX = 120;
+export const TITLE_FONT_DEFAULT = 75;
+/** Headline box; x/width are artwork px (≈ 60 layout px side margins keep text clear of the edges). */
+const title = (x: number, y: number, width: number) => ({
   x: a(x),
   y: a(y),
   width: a(width),
-  defaultFontSize: a(fontSize),
-  maxFontSize: a(fontSize),
+  defaultFontSize: TITLE_FONT_DEFAULT,
+  maxFontSize: TITLE_FONT_MAX,
 });
 const qrAt = (x: number, y: number) => ({ ...rect(x, y, 131, 131), inset: a(10) });
 const pillAt = (y: number) => ({ ...rect(681, y, 236, 73), fontSize: a(44) });
@@ -155,8 +163,8 @@ export const templates: readonly TemplateDefinition[] = [
     photoTag: pillAt(1028),
     // Bottom-left of the photo (0–964).
     photoCredit: creditAbove(964),
-    titleRegion: rect(160, 1120, 1280, 540),
-    title: title(200, 1158, 1200, 98),
+    titleRegion: rect(80, 1120, 1440, 520),
+    title: title(96, 1158, 1408),
     titleColor: WHITE,
     titleShadow: false,
     highlightColor: HIGHLIGHT_YELLOW,
@@ -165,8 +173,8 @@ export const templates: readonly TemplateDefinition[] = [
     // Ad art: same photo window; the pill rides up 101 px onto the photo edge and the panel ends at 1555.
     ad: adVariant('/templates/ad-common-card.png', {
       photoTag: pillAt(927),
-      titleRegion: rect(160, 1019, 1280, 520),
-      title: title(200, 1057, 1200, 98),
+      titleRegion: rect(80, 1019, 1440, 526),
+      title: title(96, 1057, 1408),
     }),
   },
   {
@@ -186,8 +194,9 @@ export const templates: readonly TemplateDefinition[] = [
     photoTag: pillAt(141),
     // Bottom-left of the photo (723–1689).
     photoCredit: creditAbove(1689),
-    titleRegion: rect(160, 235, 1280, 445),
-    title: title(200, 271, 1200, 98),
+    // Starts just under the pill (141–214) so three lines still clear the photo at 723.
+    titleRegion: rect(80, 232, 1440, 468),
+    title: title(96, 250, 1408),
     titleColor: WHITE,
     titleShadow: false,
     highlightColor: HIGHLIGHT_YELLOW,
@@ -198,8 +207,8 @@ export const templates: readonly TemplateDefinition[] = [
       photo: rect(0, 652, 1600, 963),
       photoTag: pillAt(67),
       photoCredit: creditAbove(1615),
-      titleRegion: rect(160, 161, 1280, 445),
-      title: title(200, 197, 1200, 98),
+      titleRegion: rect(80, 158, 1440, 482),
+      title: title(96, 176, 1408),
     }),
   },
   {
@@ -220,8 +229,8 @@ export const templates: readonly TemplateDefinition[] = [
     photoTag: null,
     // Headline is at the top; credit sits bottom-left, above the logo/meta footer.
     photoCredit: creditAt(32, 1690),
-    titleRegion: rect(80, 80, 1440, 1000),
-    title: title(100, 124, 1400, 101),
+    titleRegion: rect(56, 80, 1488, 1000),
+    title: title(80, 124, 1440),
     titleColor: WHITE,
     titleShadow: true,
     highlightColor: HIGHLIGHT_YELLOW,
@@ -251,8 +260,9 @@ export const templates: readonly TemplateDefinition[] = [
     photoTag: null,
     // Headline and footer fill the bottom; credit goes top-left.
     photoCredit: creditAt(32, 32),
-    titleRegion: rect(80, 1320, 1440, 410),
-    title: title(100, 1413, 1400, 101),
+    // Two lines sit low on the photo; a third still clears the footer logo (≈ 1796).
+    titleRegion: rect(56, 1180, 1488, 605),
+    title: title(80, 1340, 1440),
     titleColor: WHITE,
     titleShadow: true,
     highlightColor: HIGHLIGHT_YELLOW,
@@ -261,8 +271,8 @@ export const templates: readonly TemplateDefinition[] = [
     // Ad art: photo stops at the strip; headline block moves up with the footer.
     ad: adVariant('/templates/ad-special-card-bottom.png', {
       photo: rect(0, 0, 1600, 1852),
-      titleRegion: rect(80, 1320 - AD_STRIP_ARTWORK, 1440, 410),
-      title: title(100, 1413 - AD_STRIP_ARTWORK, 1400, 101),
+      titleRegion: rect(56, 1180 - AD_STRIP_ARTWORK, 1488, 605),
+      title: title(80, 1340 - AD_STRIP_ARTWORK, 1440),
     }),
   },
   {
@@ -283,8 +293,9 @@ export const templates: readonly TemplateDefinition[] = [
     photoTag: null,
     // Bottom-left of the photo (0–1255), clear of the centred "সদ্য প্রাপ্ত" pill.
     photoCredit: creditAbove(1255),
-    titleRegion: rect(80, 1330, 1440, 410),
-    title: title(100, 1374, 1400, 101),
+    // Directly under the "সদ্য প্রাপ্ত" pill (bottom ≈ 1297), down to the footer logo (≈ 1748).
+    titleRegion: rect(56, 1300, 1488, 450),
+    title: title(80, 1310, 1440),
     titleColor: WHITE,
     titleShadow: false,
     highlightColor: null,
@@ -295,8 +306,8 @@ export const templates: readonly TemplateDefinition[] = [
     ad: adVariant('/templates/ad-just-in.png', {
       photo: rect(0, 0, 1600, 1255 - AD_STRIP_ARTWORK),
       photoCredit: creditAbove(1255 - AD_STRIP_ARTWORK),
-      titleRegion: rect(80, 1330 - AD_STRIP_ARTWORK, 1440, 410),
-      title: title(100, 1374 - AD_STRIP_ARTWORK, 1400, 101),
+      titleRegion: rect(56, 1300 - AD_STRIP_ARTWORK, 1488, 450),
+      title: title(80, 1310 - AD_STRIP_ARTWORK, 1440),
     }),
   },
   {
@@ -315,8 +326,8 @@ export const templates: readonly TemplateDefinition[] = [
     dateColor: BLACK,
     photoTag: null,
     photoCredit: null,
-    titleRegion: rect(120, 330, 1360, 1300),
-    title: title(160, 393, 1280, 137),
+    titleRegion: rect(64, 330, 1472, 1300),
+    title: title(96, 393, 1408),
     titleColor: BLACK,
     titleShadow: false,
     // Yellow on the yellow card would vanish; emphasis stays black.
@@ -325,8 +336,8 @@ export const templates: readonly TemplateDefinition[] = [
     metaRows: 2,
     // Ad art: star and baked "ব্রেকিং নিউজ" are 82 px higher.
     ad: adVariant('/templates/ad-breaking-news.png', {
-      titleRegion: rect(120, 330 - 82, 1360, 1300),
-      title: title(160, 393 - 82, 1280, 137),
+      titleRegion: rect(64, 330 - 82, 1472, 1300),
+      title: title(96, 393 - 82, 1408),
     }),
   },
 ];

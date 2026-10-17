@@ -697,6 +697,38 @@ test.describe('photocard generator', () => {
     await expect(page.locator('.card-title')).toHaveCSS('font-size', '52px');
     await expect(page.locator('.card-title')).toHaveCSS('font-weight', '600');
   });
+
+  test('headline size: 75px default, slider and dropdown stay in sync and update the preview', async ({ page }) => {
+    await open(page);
+    const slider = page.locator('#font-size-range');
+    const select = page.getByLabel('Headline size', { exact: true });
+    const title = page.locator('.card-title');
+    await expect(slider).toHaveValue('75');
+    await expect(select).toHaveValue('75');
+    await expect(title).toHaveCSS('font-size', '75px');
+    // Slider → dropdown + preview (keyboard drives the native range input like a drag).
+    await slider.focus();
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowRight');
+    await expect(select).toHaveValue('77');
+    await expect(title).toHaveCSS('font-size', '77px');
+    await slider.fill('96');
+    await expect(select).toHaveValue('96');
+    await expect(title).toHaveCSS('font-size', '96px');
+    // Dropdown → slider + preview.
+    await select.selectOption('60');
+    await expect(slider).toHaveValue('60');
+    await expect(title).toHaveCSS('font-size', '60px');
+    // −/+ buttons step by 1 and respect the bounds.
+    await page.getByRole('button', { name: 'Make the headline larger' }).click();
+    await expect(select).toHaveValue('61');
+    await select.selectOption('30');
+    await expect(page.getByRole('button', { name: 'Make the headline smaller' })).toBeDisabled();
+    // Every template defaults to 75px.
+    await pickTemplate(page, /Breaking News/);
+    await expect(slider).toHaveValue('75');
+    await expect(title).toHaveCSS('font-size', '75px');
+  });
   test('category dropdown: presets, custom, auto vs manual, restore, all templates, export', async ({ page }) => {
     let category: string | null = 'খেলা';
     await page.route('**/api/article', (route) =>

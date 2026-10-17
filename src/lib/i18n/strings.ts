@@ -140,6 +140,9 @@ export const S = {
   },
   fontSize: {
     label: 'Headline size',
+    slider: (size: number, min: number, max: number) => `Headline size: ${size}px (${min}–${max})`,
+    smaller: 'Make the headline smaller',
+    larger: 'Make the headline larger',
   },
   layers: {
     names: { photo: 'photo', title: 'headline', qr: 'QR code' } as Record<LayerKey, string>,

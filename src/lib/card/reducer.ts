@@ -1,4 +1,4 @@
-import { getTemplate, resolveTemplate, type TemplateDefinition } from '../../config/templates';
+import { getTemplate, resolveTemplate, TITLE_FONT_DEFAULT, TITLE_FONT_MAX, TITLE_FONT_MIN, type TemplateDefinition } from '../../config/templates';
 import { limitTagInput, normalizePhotoTag } from './photoTag';
 import { createCardState, layoutDefaults, type AdImage, type CardState } from './types';
 
@@ -44,8 +44,8 @@ export type CardAction =
   | Readonly<{ type: 'FULL_RESET'; date?: string; templateId?: string }>;
 
 export function clampFontSize(size: number): number {
-  if (!Number.isFinite(size)) return 75;
-  return Math.min(120, Math.max(30, Math.round(size)));
+  if (!Number.isFinite(size)) return TITLE_FONT_DEFAULT;
+  return Math.min(TITLE_FONT_MAX, Math.max(TITLE_FONT_MIN, Math.round(size)));
 }
 
 /** Photo zoom bounds: 1 = contain the whole photo; 3 = triple. */

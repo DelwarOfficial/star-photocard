@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { AD_CREATIVE_SIZE, EXPORT_HEIGHT, EXPORT_SCALE, EXPORT_WIDTH, getTemplate, resolveTemplate, SITE_URL, type TemplateDefinition } from '../../config/templates';
+import { AD_CREATIVE_SIZE, EXPORT_HEIGHT, EXPORT_SCALE, EXPORT_WIDTH, getTemplate, resolveTemplate, SITE_URL, TITLE_FONT_MAX, TITLE_FONT_MIN, type TemplateDefinition } from '../../config/templates';
 import { tokenizeTitle } from '../../lib/card/highlightTitle';
 import { defaultRenderer } from '../../lib/card/html2canvasRenderer';
 import { clampPhotoOffset, clampToCanvas, effectivePhotoFit, previewScale } from '../../lib/card/geometry';
@@ -33,7 +33,7 @@ const CHOICE_CUSTOM = '__custom__';
 
 type StatusTone = 'info' | 'success' | 'warning' | 'error';
 
-const TITLE_SIZES = Array.from({ length: 91 }, (_, i) => i + 30);
+const TITLE_SIZES = Array.from({ length: TITLE_FONT_MAX - TITLE_FONT_MIN + 1 }, (_, i) => i + TITLE_FONT_MIN);
 
 /** Inline sizing for the card + frame; replaces the old fixed 1080 × 1080 CSS. */
 function canvasBox(template: TemplateDefinition, scale: number) {
@@ -940,6 +940,39 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
                 />
               )}
 
+              {/* Slider and dropdown both read and write card.fontSize, so they always agree. */}
+              <RangeField
+                id="font-size-range"
+                label={S.fontSize.slider(card.fontSize, TITLE_FONT_MIN, TITLE_FONT_MAX)}
+                min={TITLE_FONT_MIN}
+                max={TITLE_FONT_MAX}
+                step={1}
+                value={card.fontSize}
+                display={`${card.fontSize}px`}
+                onChange={(size) => dispatch({ type: 'SET_FONT_SIZE', size })}
+                before={
+                  <button
+                    type="button"
+                    className="chip"
+                    aria-label={S.fontSize.smaller}
+                    disabled={card.fontSize <= TITLE_FONT_MIN}
+                    onClick={() => dispatch({ type: 'SET_FONT_SIZE', size: card.fontSize - 1 })}
+                  >
+                    <Icon name="minus" />
+                  </button>
+                }
+                after={
+                  <button
+                    type="button"
+                    className="chip"
+                    aria-label={S.fontSize.larger}
+                    disabled={card.fontSize >= TITLE_FONT_MAX}
+                    onClick={() => dispatch({ type: 'SET_FONT_SIZE', size: card.fontSize + 1 })}
+                  >
+                    <Icon name="plus" />
+                  </button>
+                }
+              />
               <label htmlFor="font-size-select">{S.fontSize.label}</label>
               <select id="font-size-select" value={card.fontSize} onChange={(e) => dispatch({ type: 'SET_FONT_SIZE', size: Number(e.target.value) })}>
                 {TITLE_SIZES.map((size) => <option key={size} value={size}>{size}px</option>)}
