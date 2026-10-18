@@ -63,6 +63,7 @@ export const S = {
   },
   templates: {
     'common-card': 'Photo on top',
+    'common-card-without-details': 'Photo on top (no category)',
     'common-card-bottom': 'Photo at bottom',
     'special-card-top': 'Full photo, headline on top',
     'special-card-bottom': 'Full photo, headline at bottom',

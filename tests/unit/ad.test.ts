@@ -14,7 +14,7 @@ const AD = { src: 'blob:ad', width: AD_CREATIVE_SIZE.width, height: AD_CREATIVE_
 
 describe('ad registry', () => {
   it('every template has an existing ad artwork and the one strip height', () => {
-    expect(templates).toHaveLength(6);
+    expect(templates).toHaveLength(7);
     for (const t of templates) {
       for (const path of [t.src, t.thumbnail, t.ad.artwork]) expect(served(path), `${path} (exact case)`).toBe(true);
       expect(t.ad.stripHeight).toBe(AD_STRIP_HEIGHT);
@@ -119,8 +119,10 @@ describe('headline layout', () => {
         // Wide: ≤ 70 layout px side margins, but never touching the card edge.
         expect(v.title.x).toBeGreaterThan(30);
         expect(v.title.x).toBeLessThanOrEqual(70);
-        // Three 75px lines (line-height 1.3) fit below the default top.
-        expect(r.y + r.height - v.title.y, v.id).toBeGreaterThanOrEqual(3 * 75 * 1.3);
+        // Three 75px lines (line-height 1.3) fit below the default top — except the no-category
+        // ad card, whose panel ends at 1476 (artwork): room for two lines there.
+        const lines = v.id === 'common-card-without-details' && v.src.includes('/ad-') ? 2 : 3;
+        expect(r.y + r.height - v.title.y, v.id).toBeGreaterThanOrEqual(lines * 75 * 1.3);
       }
     }
   });

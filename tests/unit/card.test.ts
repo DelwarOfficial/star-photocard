@@ -211,11 +211,12 @@ describe('template registry', () => {
     expect(EXPORT_HEIGHT / EXPORT_WIDTH).toBeCloseTo(CARD_HEIGHT / CARD_WIDTH, 10);
     expect(EXPORT_SCALE).toBeCloseTo(1600 / 1080, 10);
   });
-  it('ships six 1080 × 1350 templates with layers inside their canvas', () => {
+  it('ships seven 1080 × 1350 templates with layers inside their canvas', () => {
     expect(CARD_WIDTH).toBe(1080);
     expect(CARD_HEIGHT).toBe(1350);
     expect(templates.map((t) => t.id)).toEqual([
       'common-card',
+      'common-card-without-details',
       'common-card-bottom',
       'special-card-top',
       'special-card-bottom',
@@ -245,6 +246,7 @@ describe('template registry', () => {
     const byId = Object.fromEntries(templates.map((t) => [t.id, t]));
     expect(templatesForMode('article').map((t) => t.id)).toEqual([
       'common-card',
+      'common-card-without-details',
       'common-card-bottom',
       'special-card-top',
       'special-card-bottom',
@@ -265,9 +267,11 @@ describe('template registry', () => {
       highlightColor: null,
       dateColor: '#000000',
     });
+    expect(byId['common-card-without-details']).toMatchObject({ photoTag: null, metaRows: 2, mode: 'article' });
     for (const t of templatesForMode('article')) {
       expect(t.requiresImage).toBe(false);
-      expect(t.metaRows).toBe(3);
+      // "সদ্য সংবাদ" card: url + date only, and no pill so the category never shows.
+      expect(t.metaRows).toBe(t.id === 'common-card-without-details' ? 2 : 3);
       expect(t.qr).not.toBeNull();
       expect(t.dateAlign).toBe('left');
       expect(t.highlightColor).toBe('#FFF200');
@@ -342,7 +346,8 @@ describe('reducer', () => {
     expect(reset.publicationDate).toBe('১ জানুয়ারি ২০২৭');
     // A reset keeps the chosen card type and its layout defaults.
     expect(reset.templateId).toBe('breaking-news');
-    expect(reset.titlePosition).toEqual({ x: templates[5]!.title.x, y: templates[5]!.title.y });
+    const breaking = templates.find((t) => t.id === 'breaking-news')!;
+    expect(reset.titlePosition).toEqual({ x: breaking.title.x, y: breaking.title.y });
   });
   it('pre-fills the pill with the article category only when the user has not set one', () => {
     const success = { type: 'GENERATE_SUCCESS', articleUrl: 'https://starnews.com.bd/a', title: 't', language: 'bn', imageSrc: '/p.jpg', imageKind: 'remote', category: 'রংপুর' } as const;

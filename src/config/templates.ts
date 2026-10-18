@@ -178,6 +178,36 @@ export const templates: readonly TemplateDefinition[] = [
     }),
   },
   {
+    id: 'common-card-without-details',
+    label: 'Photo on top (no category)',
+    src: '/templates/common-card-without-details.png',
+    thumbnail: '/templates/common-card-without-details.png',
+    language: 'bn',
+    mode: 'article',
+    requiresImage: false,
+    canvas,
+    photo: rect(0, 0, 1600, 966),
+    photoFit: 'cover',
+    date: dateAt(1858),
+    dateAlign: 'left',
+    dateColor: WHITE,
+    photoTag: null, // artwork ships no yellow pill — the category is never shown
+    photoCredit: creditAbove(966),
+    titleRegion: rect(80, 1019, 1440, 526),
+    title: title(96, 1057, 1408),
+    titleColor: WHITE,
+    titleShadow: false,
+    highlightColor: HIGHLIGHT_YELLOW,
+    // Centred on the 2-row meta stack (url ≈ 1810, date ≈ 1862), as on just-in.
+    qr: qrAt(1066, 1771),
+    metaRows: 2,
+    // Ad art: photo ends at 962; the panel ends at 1476 above the lifted footer.
+    ad: adVariant('/templates/ad-common-card-without-details.png', {
+      photo: rect(0, 0, 1600, 962),
+      titleRegion: rect(80, 1019, 1440, 440),
+    }),
+  },
+  {
     id: 'common-card-bottom',
     label: 'Photo at bottom',
     src: '/templates/common-card-bottom.png',

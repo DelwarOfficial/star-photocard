@@ -339,7 +339,8 @@ test.describe('photocard generator', () => {
     const article = list.getByRole('group', { name: /Article cards/ });
     const custom = list.getByRole('group', { name: /Custom cards/ });
     await expect(article.getByRole('option')).toHaveText([
-      /Photo on top/,
+      /Photo on top(?! \(no category\))/,
+      /Photo on top \(no category\)/,
       /Photo at bottom/,
       /Full photo, headline on top/,
       /Full photo, headline at bottom/,
@@ -454,7 +455,7 @@ test.describe('photocard generator', () => {
     expect(Math.min(...letterboxed!)).toBeGreaterThan(200); // card background, not photo
 
     // Switching templates keeps the choice; reset clears it.
-    await pickTemplate(page, /Photo on top/);
+    await pickTemplate(page, /Photo on top(?! \(no category\))/);
     await expect(page.getByLabel('Show whole photo (no crop)')).toBeChecked();
     page.once('dialog', (dialog) => void dialog.accept());
     await page.getByRole('button', { name: 'Reset', exact: true }).click();
@@ -524,7 +525,7 @@ test.describe('photocard generator', () => {
     await generate(page);
     await pickerButton(page).click();
     const count = await page.getByRole('listbox').getByRole('option').count();
-    expect(count).toBe(6);
+    expect(count).toBe(7);
     await page.keyboard.press('Escape');
     for (let i = 0; i < count; i += 1) {
       await pickerButton(page).click();
@@ -560,7 +561,7 @@ test.describe('photocard generator', () => {
     await expect(page.locator('#ad-image')).toHaveValue(/solid\.png$/);
     await expect(page.locator('.card-ad img')).toBeVisible();
 
-    const count = 6;
+    const count = 7;
     for (let i = 0; i < count; i += 1) {
       await pickerButton(page).click();
       await page.getByRole('listbox').getByRole('option').nth(i).click();
@@ -871,7 +872,7 @@ test.describe('photocard generator', () => {
   test('overflow blocks export and Fit headline resolves recoverable overflow', async ({ page }) => {
     await mockArticle(page, {});
     await generate(page);
-    for (const name of [/Photo on top/, /Photo at bottom/, /Full photo, headline on top/, /Full photo, headline at bottom/, /Just In/, /Breaking News/]) {
+    for (const name of [/Photo on top(?! \(no category\))/, /Photo on top \(no category\)/, /Photo at bottom/, /Full photo, headline on top/, /Full photo, headline at bottom/, /Just In/, /Breaking News/]) {
       await pickTemplate(page, name);
       if (await page.getByLabel(/^Photo \(required/).count()) await page.getByLabel(/^Photo \(required/).setInputFiles(UPLOAD_PHOTO);
       await page.getByLabel('Headline', { exact: true }).fill(Array(30).fill('বাংলা headline').join('\n'));
