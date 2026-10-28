@@ -174,7 +174,7 @@ export const templates: readonly TemplateDefinition[] = [
     date: dateLeft(1870), // calendar icon rows 1875–1900
     dateAlign: 'left',
     dateColor: WHITE,
-    photoTag: pillAt(1028),
+    photoTag: pillAt(927), // redesigned art: pill straddles the photo edge (927–1000)
     // Bottom-left of the photo (0–964).
     photoCredit: creditAbove(964),
     titleRegion: rect(80, 1120, 1440, 520),
