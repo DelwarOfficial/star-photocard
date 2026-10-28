@@ -255,8 +255,12 @@ describe('template registry', () => {
     // just-in: upload + text, QR (root domain), two meta rows.
     expect(byId['just-in']).toMatchObject({ requiresImage: true, metaRows: 2 });
     for (const t of templates) expect(t.qr, t.id).not.toBeNull();
-    // QR sits bottom-right, left of the meta stack's icons (artwork x ≈ 1238 → 836 here).
-    for (const t of templates) expect(t.qr!.x + t.qr!.width, t.id).toBeLessThan(836);
+    // QR sits in the bottom-right corner, at least 40 px clear of the right and bottom edges.
+    for (const t of templates) {
+      expect(t.qr!.x + t.qr!.width, t.id).toBeLessThanOrEqual(CARD_WIDTH - 40);
+      expect(t.qr!.y + t.qr!.height, t.id).toBeLessThanOrEqual(CARD_HEIGHT - 20);
+      expect(t.qr!.x, t.id).toBeGreaterThan(CARD_WIDTH / 2); // right half, clear of the centred logo
+    }
     expect(byId['just-in']!.photo).not.toBeNull();
     // breaking-news: text only — no photo at all; black headline, no emphasis colour.
     expect(byId['breaking-news']).toMatchObject({

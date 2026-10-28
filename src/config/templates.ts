@@ -81,7 +81,11 @@ export type AdVariant = Readonly<{
   artwork: string;
   /** Strip height in layout px (the creative is fitted into full width × this). */
   stripHeight: number;
-  layout: Partial<Pick<TemplateDefinition, 'photo' | 'photoTag' | 'photoCredit' | 'titleRegion' | 'title'>>;
+  /**
+   * Boxes the ad artwork moved. `date`/`qr` here are absolute and replace the automatic
+   * strip shift — only for ad artworks whose footer did not move by exactly the strip.
+   */
+  layout: Partial<Pick<TemplateDefinition, 'photo' | 'photoTag' | 'photoCredit' | 'titleRegion' | 'title' | 'date' | 'qr'>>;
 }>;
 
 /**
@@ -124,6 +128,16 @@ const title = (x: number, y: number, width: number) => ({
   maxFontSize: TITLE_FONT_MAX,
 });
 const qrAt = (x: number, y: number) => ({ ...rect(x, y, 131, 131), inset: a(10) });
+/**
+ * Redesigned footer: url/date/link stack bottom-left, logo centred, QR bottom-right.
+ * Date text starts at the stack's text column (x 122, right of the baked icons at 75–99);
+ * `top` = calendar-icon centre − half the 34.5 px text box (artwork px).
+ */
+const dateLeft = (top: number, textX = 122) => ({ x: a(textX), y: a(top), width: a(300), fontSize: a(30) });
+/** QR in layout px (design spec), same 131 px box as qrAt. */
+const qrLayout = (x: number, y: number) => ({ x, y, width: a(131), height: a(131), inset: a(10) });
+/** Every redesigned card: QR centred on the 3-row meta stack, 42 px clear of the right edge. */
+const QR_REDESIGN = qrLayout(950, 1230);
 const pillAt = (y: number) => ({ ...rect(681, y, 236, 73), fontSize: a(44) });
 /** Credit tag box is ≈ 50 artwork px tall (28px text + padding); keep 24px off the photo edge. */
 const CREDIT_HEIGHT = 50;
@@ -157,7 +171,7 @@ export const templates: readonly TemplateDefinition[] = [
     canvas,
     photo: rect(0, 0, 1600, 964),
     photoFit: 'cover',
-    date: dateAt(1858),
+    date: dateLeft(1870), // calendar icon rows 1875–1900
     dateAlign: 'left',
     dateColor: WHITE,
     photoTag: pillAt(1028),
@@ -168,7 +182,7 @@ export const templates: readonly TemplateDefinition[] = [
     titleColor: WHITE,
     titleShadow: false,
     highlightColor: HIGHLIGHT_YELLOW,
-    qr: qrAt(1066, 1807),
+    qr: QR_REDESIGN,
     metaRows: 3,
     // Ad art: same photo window; the pill rides up 101 px onto the photo edge and the panel ends at 1555.
     ad: adVariant('/templates/ad-common-card.png', {
@@ -188,7 +202,7 @@ export const templates: readonly TemplateDefinition[] = [
     canvas,
     photo: rect(0, 0, 1600, 966),
     photoFit: 'cover',
-    date: dateAt(1858),
+    date: dateLeft(1870), // calendar icon rows 1875–1900
     dateAlign: 'left',
     dateColor: WHITE,
     photoTag: null, // artwork ships no yellow pill — the category is never shown
@@ -199,12 +213,15 @@ export const templates: readonly TemplateDefinition[] = [
     titleShadow: false,
     highlightColor: HIGHLIGHT_YELLOW,
     // Centred on the 2-row meta stack (url ≈ 1810, date ≈ 1862), as on just-in.
-    qr: qrAt(1066, 1771),
+    qr: QR_REDESIGN,
     metaRows: 2,
     // Ad art: photo ends at 962; the panel ends at 1476 above the lifted footer.
     ad: adVariant('/templates/ad-common-card-without-details.png', {
       photo: rect(0, 0, 1600, 962),
       titleRegion: rect(80, 1019, 1440, 440),
+      // This ad artwork still has the old right-hand meta stack (url ≈ 1662, date ≈ 1714).
+      date: dateAt(1858 - AD_STRIP_ARTWORK),
+      qr: qrAt(1066, 1771 - AD_STRIP_ARTWORK),
     }),
   },
   {
@@ -218,7 +235,7 @@ export const templates: readonly TemplateDefinition[] = [
     canvas,
     photo: rect(0, 723, 1600, 966),
     photoFit: 'cover',
-    date: dateAt(1858),
+    date: dateLeft(1870), // calendar icon rows 1875–1900
     dateAlign: 'left',
     dateColor: WHITE,
     photoTag: pillAt(141),
@@ -230,7 +247,7 @@ export const templates: readonly TemplateDefinition[] = [
     titleColor: WHITE,
     titleShadow: false,
     highlightColor: HIGHLIGHT_YELLOW,
-    qr: qrAt(1066, 1807),
+    qr: QR_REDESIGN,
     metaRows: 3,
     // Ad art: the whole stack moved up 74 px (pill 67, photo 652–1615).
     ad: adVariant('/templates/ad-common-card-bottom.png', {
@@ -253,7 +270,7 @@ export const templates: readonly TemplateDefinition[] = [
     photo: rect(0, 0, 1600, 2000),
     // Full-bleed: the photo must reach every edge, as in the reference cards.
     photoFit: 'cover',
-    date: dateAt(1839),
+    date: dateLeft(1870), // calendar icon rows 1875–1900
     dateAlign: 'left',
     dateColor: WHITE,
     photoTag: null,
@@ -264,7 +281,7 @@ export const templates: readonly TemplateDefinition[] = [
     titleColor: WHITE,
     titleShadow: true,
     highlightColor: HIGHLIGHT_YELLOW,
-    qr: qrAt(1067, 1794),
+    qr: QR_REDESIGN,
     metaRows: 3,
     // Ad art: the photo stops at the strip; headline unchanged, credit follows the footer up.
     ad: adVariant('/templates/ad-special-card-top.png', {
@@ -284,7 +301,7 @@ export const templates: readonly TemplateDefinition[] = [
     photo: rect(0, 0, 1600, 2000),
     // Full-bleed: the photo must reach every edge, as in the reference cards.
     photoFit: 'cover',
-    date: dateAt(1839),
+    date: dateLeft(1886), // this artwork's stack sits 15 px lower (icon 1890–1916)
     dateAlign: 'left',
     dateColor: WHITE,
     photoTag: null,
@@ -296,13 +313,15 @@ export const templates: readonly TemplateDefinition[] = [
     titleColor: WHITE,
     titleShadow: true,
     highlightColor: HIGHLIGHT_YELLOW,
-    qr: qrAt(1067, 1794),
+    qr: QR_REDESIGN,
     metaRows: 3,
     // Ad art: photo stops at the strip; headline block moves up with the footer.
     ad: adVariant('/templates/ad-special-card-bottom.png', {
       photo: rect(0, 0, 1600, 1852),
       titleRegion: rect(56, 1180 - AD_STRIP_ARTWORK, 1488, 605),
       title: title(80, 1340 - AD_STRIP_ARTWORK, 1440),
+      // Footer here moved 174 px, not 148: calendar icon 1716–1742.
+      date: dateLeft(1712),
     }),
   },
   {
@@ -316,7 +335,7 @@ export const templates: readonly TemplateDefinition[] = [
     canvas,
     photo: rect(0, 0, 1600, 1255),
     photoFit: 'cover',
-    date: dateAt(1841),
+    date: dateLeft(1914, 104), // two-row stack drawn further left: icons 58–82, text from 104; calendar 1919–1944
     dateAlign: 'left',
     dateColor: WHITE,
     // The pill text "সদ্য প্রাপ্ত" is baked into the artwork; a user tag would overlay it.
@@ -330,7 +349,7 @@ export const templates: readonly TemplateDefinition[] = [
     titleShadow: false,
     highlightColor: null,
     // Centred on the 2-row meta stack (url ≈ 1810, date ≈ 1862), left of the icons.
-    qr: qrAt(1066, 1771),
+    qr: QR_REDESIGN,
     metaRows: 2,
     // Ad art: the red panel and "সদ্য প্রাপ্ত" pill moved up 148 px, so the photo ends at 1107.
     ad: adVariant('/templates/ad-just-in.png', {
@@ -338,6 +357,8 @@ export const templates: readonly TemplateDefinition[] = [
       photoCredit: creditAbove(1255 - AD_STRIP_ARTWORK),
       titleRegion: rect(56, 1300 - AD_STRIP_ARTWORK, 1488, 450),
       title: title(80, 1310 - AD_STRIP_ARTWORK, 1440),
+      // Footer here moved 172 px, not 148: calendar icon 1746–1772.
+      date: dateLeft(1742),
     }),
   },
   {
@@ -362,7 +383,8 @@ export const templates: readonly TemplateDefinition[] = [
     titleShadow: false,
     // Yellow on the yellow card would vanish; emphasis stays black.
     highlightColor: null,
-    qr: qrAt(1067, 1795),
+    // Breaking art keeps the old right-hand meta stack; only the QR moves.
+    qr: qrLayout(732, 1215),
     metaRows: 2,
     // Ad art: star and baked "ব্রেকিং নিউজ" are 82 px higher.
     ad: adVariant('/templates/ad-breaking-news.png', {
@@ -389,8 +411,8 @@ export function resolveTemplate(template: TemplateDefinition, adVisible: boolean
     ...template,
     ...layout,
     src: artwork,
-    date: { ...template.date, y: template.date.y - stripHeight },
-    qr: template.qr && { ...template.qr, y: template.qr.y - stripHeight },
+    date: layout.date ?? { ...template.date, y: template.date.y - stripHeight },
+    qr: layout.qr !== undefined ? layout.qr : template.qr && { ...template.qr, y: template.qr.y - stripHeight },
   };
 }
 

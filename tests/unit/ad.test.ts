@@ -33,8 +33,11 @@ describe('ad registry', () => {
       const ad = resolveTemplate(t, true);
       expect(ad.src).toBe(t.ad.artwork);
       expect(ad.canvas).toEqual(t.canvas);
-      expect(ad.date.y).toBe(t.date.y - t.ad.stripHeight);
-      if (t.qr) expect(ad.qr!.y).toBe(t.qr.y - t.ad.stripHeight);
+      // Automatic shift unless that ad artwork's footer moved differently (explicit override).
+      if (t.ad.layout.date) expect(ad.date).toEqual(t.ad.layout.date);
+      else expect(ad.date).toEqual({ ...t.date, y: t.date.y - t.ad.stripHeight });
+      if (t.ad.layout.qr) expect(ad.qr).toEqual(t.ad.layout.qr);
+      else if (t.qr) expect(ad.qr).toEqual({ ...t.qr, y: t.qr.y - t.ad.stripHeight });
     }
   });
 
