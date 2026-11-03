@@ -372,7 +372,9 @@ export const templates: readonly TemplateDefinition[] = [
     canvas,
     photo: null,
     photoFit: 'cover', // no photo window; unused
-    date: dateLeft(1888), // redesigned stack: calendar icon 1892–1918 (centre 1905)
+    // Design spec (77, 1276): text column 114, beside the calendar icon (x 74–96, y 1892–1918).
+    // The ad art's icon sits at 1746–1771, so the automatic −148 shift (→ 1742) lands on it.
+    date: dateLeft(1890, 114),
     dateAlign: 'left',
     dateColor: BLACK,
     photoTag: null,
@@ -383,15 +385,13 @@ export const templates: readonly TemplateDefinition[] = [
     titleShadow: false,
     // Yellow on the yellow card would vanish; emphasis stays black.
     highlightColor: null,
-    // Redesigned art: meta stack bottom-left, logo centred; QR sits right of the logo.
-    qr: qrLayout(732, 1215),
+    // Same QR spot as the other redesigned cards; right side is empty from x 984 (logo end).
+    qr: QR_REDESIGN,
     metaRows: 2,
     // Ad art: star and baked "ব্রেকিং নিউজ" are 82 px higher.
     ad: adVariant('/templates/ad-breaking-news.png', {
       titleRegion: rect(64, 330 - 82, 1472, 1300),
       title: title(96, 393 - 82, 1408),
-      // Footer moved 146 px, not 148: calendar icon 1746–1771.
-      date: dateLeft(1742),
     }),
   },
 ];

@@ -130,3 +130,14 @@ describe('headline layout', () => {
     }
   });
 });
+
+describe('breaking-news footer (design spec)', () => {
+  it('date at (77, 1276), QR at the shared redesign spot; ad shifts both by the strip', () => {
+    const t = templates.find((x) => x.id === 'breaking-news')!;
+    const common = templates.find((x) => x.id === 'common-card')!;
+    expect(t.date).toMatchObject({ x: 77, y: 1276 });
+    expect(t.qr).toEqual(common.qr);
+    expect(t.ad.layout.date).toBeUndefined();
+    expect(resolveTemplate(t, true).date).toMatchObject({ x: 77, y: 1276 - AD_STRIP_HEIGHT });
+  });
+});
