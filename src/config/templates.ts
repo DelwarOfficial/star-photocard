@@ -233,14 +233,14 @@ export const templates: readonly TemplateDefinition[] = [
     mode: 'article',
     requiresImage: false,
     canvas,
-    photo: rect(0, 723, 1600, 966),
+    photo: rect(0, 799, 1600, 963), // redesigned art: window 799–1762
     photoFit: 'cover',
     date: dateLeft(1870), // calendar icon rows 1875–1900
     dateAlign: 'left',
     dateColor: WHITE,
     photoTag: pillAt(141),
-    // Bottom-left of the photo (723–1689).
-    photoCredit: creditAbove(1689),
+    // Bottom-left of the photo (799–1762).
+    photoCredit: creditAbove(1762),
     // Starts just under the pill (141–214) so three lines still clear the photo at 723.
     titleRegion: rect(80, 232, 1440, 468),
     title: title(96, 250, 1408),
@@ -341,7 +341,7 @@ export const templates: readonly TemplateDefinition[] = [
     // The pill text "সদ্য প্রাপ্ত" is baked into the artwork; a user tag would overlay it.
     photoTag: null,
     // Bottom-left of the photo (0–1255), clear of the centred "সদ্য প্রাপ্ত" pill.
-    photoCredit: creditAbove(1255),
+    photoCredit: creditAbove(1224), // redesigned art: photo shows through to 1224
     // Directly under the "সদ্য প্রাপ্ত" pill (bottom ≈ 1297), down to the footer logo (≈ 1748).
     titleRegion: rect(56, 1300, 1488, 450),
     title: title(80, 1310, 1440),
@@ -354,7 +354,7 @@ export const templates: readonly TemplateDefinition[] = [
     // Ad art: the red panel and "সদ্য প্রাপ্ত" pill moved up 148 px, so the photo ends at 1107.
     ad: adVariant('/templates/ad-just-in.png', {
       photo: rect(0, 0, 1600, 1255 - AD_STRIP_ARTWORK),
-      photoCredit: creditAbove(1255 - AD_STRIP_ARTWORK),
+      photoCredit: creditAbove(1075), // ad art: photo shows through to 1075
       titleRegion: rect(56, 1300 - AD_STRIP_ARTWORK, 1488, 450),
       title: title(80, 1310 - AD_STRIP_ARTWORK, 1440),
       // Footer here moved 172 px, not 148: calendar icon 1746–1772.

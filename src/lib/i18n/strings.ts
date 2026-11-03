@@ -117,7 +117,7 @@ export const S = {
     customPlaceholder: 'e.g. বিজ্ঞান',
     count: (used: number, max: number) => `${used}/${max} characters — leave it empty for no label.`,
     useArticle: 'Use the article’s category',
-    noPill: 'This card design has no category label. It shows on the Photo on top and Photo at bottom cards.',
+    noPill: 'This card has no category label. Your category is kept and shows again on cards that have the yellow label.',
     label: 'Category (yellow label)',
     help: 'Filled in from the article when we can find it. Pick another section or write your own.',
   },
@@ -140,7 +140,7 @@ export const S = {
     in: 'Zoom photo in',
   },
   fontSize: {
-    label: 'Headline size',
+    exact: 'Exact size',
     slider: (size: number, min: number, max: number) => `Headline size: ${size}px (${min}–${max})`,
     smaller: 'Make the headline smaller',
     larger: 'Make the headline larger',

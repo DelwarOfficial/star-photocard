@@ -758,6 +758,10 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
               </div>
               <small id="pub-date-help">{S.date.help}</small>
 
+              {/* Cards without a baked pill hide the field; the value is kept for cards that show it. */}
+              {!template.photoTag && <small id="photo-tag-help" className="field-note">{S.category.noPill}</small>}
+              {template.photoTag && (
+                <>
               <label htmlFor="photo-tag">{S.category.label}</label>
               <select
                 id="photo-tag" lang="bn"
@@ -787,7 +791,7 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
                 ))}
                 <option value={CHOICE_CUSTOM}>{S.category.custom}</option>
               </select>
-              <small id="photo-tag-help">{template.photoTag ? S.category.help : S.category.noPill}</small>
+              <small id="photo-tag-help">{S.category.help}</small>
               {categoryChoice === CHOICE_CUSTOM && (
                 <div className="reveal">
                   <label htmlFor="photo-tag-custom">{S.category.customLabel}</label>
@@ -815,6 +819,8 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
                   <Icon name="reset" size={18} />
                   {S.category.useArticle}
                 </button>
+              )}
+                </>
               )}
 
               {template.photoCredit && (
@@ -973,11 +979,13 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
                   </button>
                 }
               />
-              <label htmlFor="font-size-select">{S.fontSize.label}</label>
-              <select id="font-size-select" value={card.fontSize} onChange={(e) => dispatch({ type: 'SET_FONT_SIZE', size: Number(e.target.value) })}>
-                {TITLE_SIZES.map((size) => <option key={size} value={size}>{size}px</option>)}
-              </select>
-              <button type="button" className="button secondary" onClick={fitHeadline}>Fit headline</button>
+              <div className="size-row">
+                <label htmlFor="font-size-select">{S.fontSize.exact}</label>
+                <select id="font-size-select" value={card.fontSize} onChange={(e) => dispatch({ type: 'SET_FONT_SIZE', size: Number(e.target.value) })}>
+                  {TITLE_SIZES.map((size) => <option key={size} value={size}>{size}px</option>)}
+                </select>
+                <button type="button" className="button secondary" onClick={fitHeadline}>Fit headline</button>
+              </div>
               {headlineOverflow && <p className="field-error" role="alert">Headline exceeds its safe area. Fit it, shorten it, or move it back before export.</p>}
 
               <NudgePad

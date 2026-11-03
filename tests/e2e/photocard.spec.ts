@@ -694,7 +694,7 @@ test.describe('photocard generator', () => {
     await page.locator('h1').click();
     await page.keyboard.press('g');
     await expect(page.getByRole('status')).not.toContainText('Fetching');
-    await page.getByLabel('Headline size', { exact: true }).selectOption('52');
+    await page.getByLabel('Exact size', { exact: true }).selectOption('52');
     await expect(page.locator('.card-title')).toHaveCSS('font-size', '52px');
     await expect(page.locator('.card-title')).toHaveCSS('font-weight', '600');
   });
@@ -702,7 +702,7 @@ test.describe('photocard generator', () => {
   test('headline size: 75px default, slider and dropdown stay in sync and update the preview', async ({ page }) => {
     await open(page);
     const slider = page.locator('#font-size-range');
-    const select = page.getByLabel('Headline size', { exact: true });
+    const select = page.getByLabel('Exact size', { exact: true });
     const title = page.locator('.card-title');
     await expect(slider).toHaveValue('75');
     await expect(select).toHaveValue('75');
@@ -769,11 +769,12 @@ test.describe('photocard generator', () => {
     await expect(categorySelect(page)).toHaveValue('বিশ্ব');
     await expect(pill).toHaveText('বিশ্ব');
     await expect(page.getByLabel('Your category', { exact: true })).toHaveCount(0);
-    // Available on every template; cards without a pill say so and keep the value.
+    // Cards without a pill hide the field but keep the value for the next pill card.
     await pickTemplate(page, /Full photo, headline on top/);
-    await expect(categorySelect(page)).toHaveValue('বিশ্ব');
+    await expect(categorySelect(page)).toHaveCount(0);
     await expect(page.locator('#photo-tag-help')).toContainText('no category label');
     await pickTemplate(page, /Photo at bottom/);
+    await expect(categorySelect(page)).toHaveValue('বিশ্ব');
     await expect(pill).toHaveText('বিশ্ব');
     // Export carries the same pill: dark text pixels inside the (baked) yellow pill zone.
     const pillPixels = async () => {
@@ -879,7 +880,7 @@ test.describe('photocard generator', () => {
       await expect(page.getByRole('button', { name: 'Download PNG' })).toBeDisabled();
       await expect(page.getByRole('alert')).toContainText('safe area');
       await page.getByLabel('Headline', { exact: true }).fill('বাংলা headline one two three four five six seven eight');
-      await page.getByLabel('Headline size', { exact: true }).selectOption('120');
+      await page.getByLabel('Exact size', { exact: true }).selectOption('120');
       await page.getByRole('button', { name: 'Fit headline', exact: true }).click();
       await expect(page.getByRole('button', { name: 'Download PNG' })).toBeEnabled();
       expect(await downloadPng(page)).toMatchObject({ width: CARD_W, height: CARD_H });
