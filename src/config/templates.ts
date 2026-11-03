@@ -372,7 +372,7 @@ export const templates: readonly TemplateDefinition[] = [
     canvas,
     photo: null,
     photoFit: 'cover', // no photo window; unused
-    date: dateAt(1886),
+    date: dateLeft(1888), // redesigned stack: calendar icon 1892–1918 (centre 1905)
     dateAlign: 'left',
     dateColor: BLACK,
     photoTag: null,
@@ -383,13 +383,15 @@ export const templates: readonly TemplateDefinition[] = [
     titleShadow: false,
     // Yellow on the yellow card would vanish; emphasis stays black.
     highlightColor: null,
-    // Breaking art keeps the old right-hand meta stack; only the QR moves.
+    // Redesigned art: meta stack bottom-left, logo centred; QR sits right of the logo.
     qr: qrLayout(732, 1215),
     metaRows: 2,
     // Ad art: star and baked "ব্রেকিং নিউজ" are 82 px higher.
     ad: adVariant('/templates/ad-breaking-news.png', {
       titleRegion: rect(64, 330 - 82, 1472, 1300),
       title: title(96, 393 - 82, 1408),
+      // Footer moved 146 px, not 148: calendar icon 1746–1771.
+      date: dateLeft(1742),
     }),
   },
 ];
