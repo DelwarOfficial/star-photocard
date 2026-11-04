@@ -149,6 +149,21 @@ async function downloadPng(page: Page): Promise<{ width: number; height: number;
 }
 
 test.describe('photocard generator', () => {
+  test('article cards show a QR before any article: root domain, then the article short link', async ({ page }) => {
+    await mockArticle(page, {});
+    await open(page);
+    await pickTemplate(page, /Photo on top \(no category\)/);
+    const toggle = page.getByLabel(/^Show QR code/);
+    await toggle.uncheck();
+    await expect(page.locator('.qr')).toHaveCount(0);
+    await toggle.check();
+    await expectQrEncodes(page, 'https://starnews.com.bd');
+    await page.getByLabel('Star News article link').fill(ARTICLE_URL);
+    await page.getByRole('button', { name: 'Generate', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Card ready');
+    await expectQrEncodes(page, ARTICLE_URL);
+  });
+
   test('empty state disables export, auto-dates the card and validates URLs', async ({ page }) => {
     await open(page);
     await expect(page.getByRole('heading', { name: 'Photocard Generator' })).toBeVisible();

@@ -141,3 +141,21 @@ describe('breaking-news footer (design spec)', () => {
     expect(resolveTemplate(t, true).date).toMatchObject({ x: 77, y: 1276 - AD_STRIP_HEIGHT });
   });
 });
+
+describe('redesigned photo windows and old-stack ad footer', () => {
+  it('Photo at bottom: window at the measured artwork rows, base and ad', () => {
+    const t = templates.find((x) => x.id === 'common-card-bottom')!;
+    // Base art: transparent rows 799–1762 (artwork px) → layout.
+    expect(t.photo).toEqual({ x: 0, y: Math.round(799 * 0.675), width: 1080, height: Math.round(963 * 0.675) });
+    // Ad art: clear from 651; rows 1371–1614 are a dark gradient over the photo, so the photo
+    // must reach 1615 or that gradient darkens the bare card instead.
+    expect(resolveTemplate(t, true).photo).toEqual({ x: 0, y: Math.round(652 * 0.675), width: 1080, height: Math.round(963 * 0.675) });
+  });
+  it('no-category ad art keeps the old right-hand footer: date and QR stay on its icons', () => {
+    const t = templates.find((x) => x.id === 'common-card-without-details')!;
+    const ad = resolveTemplate(t, true);
+    expect(ad.date.x).toBe(Math.round(1284 * 0.675));
+    expect(ad.qr!.x).toBe(Math.round(1066 * 0.675));
+    expect(t.qr).not.toBeNull();
+  });
+});

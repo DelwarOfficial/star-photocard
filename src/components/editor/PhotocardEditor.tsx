@@ -143,9 +143,9 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
   }, [card.photoTag, card.language, template]);
   const titleHeight = (): number =>
     Math.min(template.canvas.height, titleRef.current?.offsetHeight || card.fontSize * 1.3);
-  // Article cards encode the reference news link; custom cards have none, so they encode the root domain.
-  // Article cards: the short link (section + ID); custom cards have no article, so the root domain.
-  const qrTarget = template.qr ? (template.mode === 'article' ? (card.articleUrl ? shortArticleUrl(card.articleUrl) : '') : SITE_URL) : '';
+  // Article cards encode the article's short link (section + ID) once one is fetched. Until then —
+  // and always on custom cards — the QR encodes the root domain, so a hand-made card still has one.
+  const qrTarget = template.qr ? (template.mode === 'article' && card.articleUrl ? shortArticleUrl(card.articleUrl) : SITE_URL) : '';
   const titleLines = useMemo(() => tokenizeTitle(card.title), [card.title]);
   // Intrinsic size of the displayed photo; drag bounds must use the same cover math as export.
   const [photoSize, setPhotoSize] = useState({ width: 1920, height: 1080 });
