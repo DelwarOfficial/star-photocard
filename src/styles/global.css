@@ -63,7 +63,9 @@ input,textarea{caret-color:var(--signal)}
 .controls input:focus-visible,.controls textarea:focus-visible,.controls select:focus-visible{outline:none;border-color:var(--focus);box-shadow:0 0 0 3px #146fa340}
 .controls textarea{resize:vertical}
 .controls select{cursor:pointer}
-.controls small{color:var(--muted);display:block;margin-top:6px;font-size:.8rem;line-height:1.45}
+/* One size for all help text, notes and counters. */
+:root{--hint-size:.8125rem}
+.controls small{color:var(--muted);display:block;margin-top:6px;font-size:var(--hint-size);line-height:1.45}
 .controls input[type=number]{max-width:96px}
 .url-row{position:relative}
 .url-row .url-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
@@ -71,8 +73,14 @@ input,textarea{caret-color:var(--signal)}
 .input-action{display:flex;gap:8px;align-items:stretch;margin-top:10px}
 .input-action input{min-width:0}
 .field-error{color:#8f1d26;background:#fbe7e9;border:1px solid #e5a9ae;padding:8px 10px;border-radius:10px;font-size:.86rem}
-.field-note{color:var(--muted);font-size:.82rem;margin:8px 0}
-.word-hint{color:var(--muted);font-size:.8rem;margin:6px 0 0;font-variant-numeric:tabular-nums}
+.field-note{color:var(--muted);font-size:var(--hint-size);line-height:1.45;margin:8px 0}
+.word-hint{color:var(--muted);font-size:var(--hint-size);margin:6px 0 0;font-variant-numeric:tabular-nums}
+/* B: file pickers use the app's secondary-button look instead of the browser default. */
+.controls input[type=file]{padding:6px 8px;cursor:pointer;color:var(--muted);font-size:var(--hint-size)}
+.controls input[type=file]::file-selector-button{font:inherit;font-size:.875rem;font-weight:800;color:var(--ink);margin-right:12px;min-height:34px;padding:6px 14px;border:1px solid var(--line-strong);border-radius:var(--radius);background:#fff;cursor:pointer;transition:border-color .15s var(--ease)}
+.controls input[type=file]:hover::file-selector-button{border-color:#8a847a}
+/* G: Bengali entry fields use the card's StarNews face (editor only; the export never reads these styles). */
+.controls :is(input,textarea,select):lang(bn){font-family:StarBangla,ui-sans-serif,system-ui,sans-serif;line-height:1.5}
 .reveal{animation:reveal .22s var(--ease)}
 
 /* ---------- Buttons ---------- */
@@ -162,6 +170,8 @@ input,textarea{caret-color:var(--signal)}
 
 /* ---------- Switch ---------- */
 .qr-toggle{display:flex;align-items:center;gap:10px;min-height:44px;margin-top:10px}
+.shortcut-toggle{display:flex;align-items:center;justify-content:center;gap:10px;min-height:32px;margin:0;color:var(--muted);font-size:.875rem}
+.shortcut-toggle label{cursor:pointer}
 .controls .qr-toggle label{flex:1;margin:0;padding:10px 0;cursor:pointer}
 .switch{appearance:none;flex:none;position:relative;width:44px!important;height:24px!important;margin:0;border-radius:999px;background:#8a847a;cursor:pointer;transition:background-color .2s var(--ease)}
 .switch::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px #0004;transition:transform .2s var(--ease)}
@@ -246,6 +256,11 @@ kbd{display:inline-block;min-width:22px;padding:1px 6px;border:1px solid var(--l
 @media(max-width:480px){
   .app-shell{padding:12px 12px 32px}
   .header-status{display:none}
+  .app-header{flex-wrap:nowrap;align-items:flex-start;gap:10px}
+  .brand{min-width:0;gap:10px}
+  .app-header h1{font-size:1.3rem}
+  .toolbar{flex:none}
+  .toolbar .button{padding:10px 12px}
   .controls{padding:16px;border-radius:14px}
   .input-action{flex-direction:column}
   .export-actions{position:sticky;bottom:0;z-index:20;background:var(--surface);padding:10px 0;box-shadow:0 -10px 12px -6px var(--surface)}

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "workers",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["wrangler", "dev", "--ip", "127.0.0.1", "--port", "8790"],
+      "port": 8790
+    }
+  ]
+}

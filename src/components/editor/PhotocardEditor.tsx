@@ -122,7 +122,7 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
       abortRef.current = null;
       requestSeq.current += 1;
       rawDispatch({ type: 'GENERATE_ERROR' });
-      setStatus({ tone: 'info', text: 'Fetch cancelled to keep your latest edits.' });
+      setStatus({ tone: 'info', text: S.status.fetchCancelledForEdit });
     }
     rawDispatch(action);
   }, []);
@@ -884,11 +884,13 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
                     accept="image/*"
                     onChange={(e) => chooseLocalImage(e.target.files?.[0])}
                   />
-                  <div className="input-action">
-                    <button type="button" className="button secondary" onClick={restoreArticleImage}>
-                      {S.upload.restore}
-                    </button>
-                  </div>
+                  {lastRemoteImage && (
+                    <div className="input-action">
+                      <button type="button" className="button secondary" onClick={restoreArticleImage}>
+                        {S.upload.restore}
+                      </button>
+                    </div>
+                  )}
                   <p className="field-note">
                     {S.upload.source.label} {S.upload.source[card.image.kind]}.
                   </p>
@@ -984,9 +986,9 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
                 <select id="font-size-select" value={card.fontSize} onChange={(e) => dispatch({ type: 'SET_FONT_SIZE', size: Number(e.target.value) })}>
                   {TITLE_SIZES.map((size) => <option key={size} value={size}>{size}px</option>)}
                 </select>
-                <button type="button" className="button secondary" onClick={fitHeadline}>Fit headline</button>
+                <button type="button" className="button secondary" onClick={fitHeadline}>{S.headline.fit}</button>
               </div>
-              {headlineOverflow && <p className="field-error" role="alert">Headline exceeds its safe area. Fit it, shorten it, or move it back before export.</p>}
+              {headlineOverflow && <p className="field-error" role="alert">{S.headline.overflow}</p>}
 
               <NudgePad
                 layers={layers}
@@ -1076,7 +1078,19 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
                   {exporting === 'copy' ? S.export.copying : S.export.copy}
                 </button>
               </div>
-              {needsUpload && <p className="field-note">{S.export.needsPhoto}</p>}
+              {needsUpload ? (
+                <p className="field-note">{S.export.needsPhoto}</p>
+              ) : (
+                !canExport && (
+                  <p className="field-note">
+                    {card.loadStatus === 'loading'
+                      ? S.export.waitForArticle
+                      : card.title.trim() === ''
+                        ? S.export.needsHeadline
+                        : S.export.fixHeadline}
+                  </p>
+                )
+              )}
               {!clipboardSupported && <p className="field-note">{S.export.copyUnsupportedNote}</p>}
             </fieldset>
           </section>
@@ -1209,7 +1223,17 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
           <p className="dimensions">
             <span className="badge">{S.export.previewScale(EXPORT_WIDTH, EXPORT_HEIGHT, (scale / EXPORT_SCALE).toFixed(2))}</span>
           </p>
-          <label className="shortcut-toggle"><input type="checkbox" checked={shortcutsEnabled} onChange={(e) => setShortcutsEnabled(e.target.checked)} /> Enable keyboard shortcuts</label>
+          <div className="shortcut-toggle">
+            <input
+              id="shortcuts-enabled"
+              type="checkbox"
+              role="switch"
+              className="switch"
+              checked={shortcutsEnabled}
+              onChange={(e) => setShortcutsEnabled(e.target.checked)}
+            />
+            <label htmlFor="shortcuts-enabled">{S.shortcuts.enable}</label>
+          </div>
           <p className="shortcuts" aria-label={S.shortcuts.label}>
             {isArticle && (
               <span>

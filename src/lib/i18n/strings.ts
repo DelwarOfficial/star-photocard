@@ -51,6 +51,7 @@ export const S = {
   },
   shortcuts: {
     label: 'Keyboard shortcuts',
+    enable: 'Enable keyboard shortcuts',
     generate: 'Generate',
     download: 'Download',
     copy: 'Copy',
@@ -99,6 +100,8 @@ export const S = {
   headline: {
     label: 'Headline',
     placeholder: 'Type the headline (in Bengali)',
+    fit: 'Fit headline',
+    overflow: 'Headline exceeds its safe area. Fit it, shorten it, or move it back before export.',
     stats: (words: number, size: number) => `${words} ${words === 1 ? 'word' : 'words'} · headline size ${size}px`,
     helpHighlight:
       'Wrap words in *asterisks* to make them yellow. If you don’t, part of the headline is highlighted for you. Line breaks are kept.',
@@ -181,6 +184,9 @@ export const S = {
     copyTitle: 'Copy the PNG to your clipboard',
     copyUnsupportedTitle: 'Copying needs HTTPS and clipboard support — Download always works',
     needsPhoto: 'Add a photo for this card to enable export.',
+    needsHeadline: 'Add a headline to enable export.',
+    waitForArticle: 'Export unlocks when the article finishes loading.',
+    fixHeadline: 'Fit or shorten the headline to enable export.',
     copyUnsupportedNote: 'Copying needs a secure browser with image clipboard support. Download always works.',
     previewScale: (w: number, h: number, scale: string) => `${w} × ${h} PNG · preview at ${scale}×`,
   },
@@ -193,6 +199,7 @@ export const S = {
       'Card ready with the demo photo — the article has a photo, but the server isn’t set up to serve it (IMAGE_TOKEN_SECRET is missing).',
     ready: 'Card ready — copy or download it.',
     cancelled: 'Stopped fetching. Your card is just as you left it.',
+    fetchCancelledForEdit: 'Fetch cancelled to keep your latest edits.',
     badFile: 'Please choose a JPG, PNG, WebP or GIF file.',
     tooBig: 'That photo is over 8 MB — please pick a smaller one.',
     localLoaded: 'Photo added. It stays in this browser and is never uploaded.',
