@@ -909,6 +909,17 @@ test.describe('photocard generator', () => {
     // Four step headings (level 2) and the Layout sub-groups (level 3) for screen-reader navigation.
     await expect(page.getByRole('heading', { level: 2 })).toHaveCount(4);
     await expect(page.getByRole('heading', { level: 3, name: 'Position' })).toHaveCount(1);
+    // Size and category sit directly under the headline, before the date.
+    const order = await page.evaluate(() =>
+      ['#headline', '#font-size-range', '#font-size-select', '#photo-tag', '#pub-date'].map((sel) => {
+        const el = document.querySelector(sel)!;
+        return document.querySelector('#headline')!.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING ? 1 : 0;
+      }),
+    );
+    expect(order).toEqual([0, 1, 1, 1, 1]);
+    const y = async (sel: string) => (await page.locator(sel).boundingBox())!.y;
+    expect(await y('#font-size-range')).toBeLessThan(await y('#photo-tag'));
+    expect(await y('#photo-tag')).toBeLessThan(await y('#pub-date'));
     // Overflow: the error sits on the headline field, marks it invalid, and fixes in one click.
     const headline = page.getByLabel('Headline', { exact: true });
     await headline.fill(Array(30).fill('বাংলা headline').join('\n'));

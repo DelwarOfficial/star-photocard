@@ -170,7 +170,7 @@ export const S = {
   },
   layoutReset: 'Reset layout to the template defaults',
   /** Sub-group headings inside the Layout section. */
-  layoutGroups: { photo: 'Photo', headline: 'Headline', position: 'Position', qrAd: 'QR code & ad strip' },
+  layoutGroups: { photo: 'Photo', position: 'Position', qrAd: 'QR code & ad strip' },
   ad: {
     toggle: 'Ad strip at the bottom',
     upload: 'Ad creative (JPG, PNG or WebP, up to 8 MB)',

@@ -748,25 +748,47 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
               </p>
               <small id="headline-help">{template.highlightColor ? S.headline.helpHighlight : S.headline.helpPlain}</small>
 
-              <label htmlFor="pub-date">{S.date.label}</label>
-              <div className="input-action">
-                <input
-                  id="pub-date" lang="bn"
-                  type="text"
-                  value={card.publicationDate}
-                  placeholder="Dhaka date"
-                  aria-describedby="pub-date-help"
-                  onChange={(e) => dispatch({ type: 'SET_DATE', date: e.target.value })}
-                />
-                <button
-                  type="button"
-                  className="button secondary"
-                  onClick={() => dispatch({ type: 'SET_DATE', date: todayBanglaDate() })}
-                >
-                  {S.date.today}
-                </button>
+              {/* The two most-adjusted settings sit right under the headline for instant access. */}
+              {/* Slider and dropdown both read and write card.fontSize, so they always agree. */}
+              <RangeField
+                id="font-size-range"
+                label={S.fontSize.slider(card.fontSize, TITLE_FONT_MIN, TITLE_FONT_MAX)}
+                min={TITLE_FONT_MIN}
+                max={TITLE_FONT_MAX}
+                step={1}
+                value={card.fontSize}
+                display={`${card.fontSize}px`}
+                onChange={(size) => dispatch({ type: 'SET_FONT_SIZE', size })}
+                before={
+                  <button
+                    type="button"
+                    className="chip"
+                    aria-label={S.fontSize.smaller}
+                    disabled={card.fontSize <= TITLE_FONT_MIN}
+                    onClick={() => dispatch({ type: 'SET_FONT_SIZE', size: card.fontSize - 1 })}
+                  >
+                    <Icon name="minus" />
+                  </button>
+                }
+                after={
+                  <button
+                    type="button"
+                    className="chip"
+                    aria-label={S.fontSize.larger}
+                    disabled={card.fontSize >= TITLE_FONT_MAX}
+                    onClick={() => dispatch({ type: 'SET_FONT_SIZE', size: card.fontSize + 1 })}
+                  >
+                    <Icon name="plus" />
+                  </button>
+                }
+              />
+              <div className="size-row">
+                <label htmlFor="font-size-select">{S.fontSize.exact}</label>
+                <select id="font-size-select" value={card.fontSize} onChange={(e) => dispatch({ type: 'SET_FONT_SIZE', size: Number(e.target.value) })}>
+                  {TITLE_SIZES.map((size) => <option key={size} value={size}>{size}px</option>)}
+                </select>
+                <button type="button" className="button secondary" onClick={fitHeadline}>{S.headline.fit}</button>
               </div>
-              <small id="pub-date-help">{S.date.help}</small>
 
               {/* Cards without a baked pill hide the field; the value is kept for cards that show it. */}
               {!template.photoTag && <small id="photo-tag-help" className="field-note">{S.category.noPill}</small>}
@@ -832,6 +854,27 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
               )}
                 </>
               )}
+
+
+              <label htmlFor="pub-date">{S.date.label}</label>
+              <div className="input-action">
+                <input
+                  id="pub-date" lang="bn"
+                  type="text"
+                  value={card.publicationDate}
+                  placeholder="Dhaka date"
+                  aria-describedby="pub-date-help"
+                  onChange={(e) => dispatch({ type: 'SET_DATE', date: e.target.value })}
+                />
+                <button
+                  type="button"
+                  className="button secondary"
+                  onClick={() => dispatch({ type: 'SET_DATE', date: todayBanglaDate() })}
+                >
+                  {S.date.today}
+                </button>
+              </div>
+              <small id="pub-date-help">{S.date.help}</small>
 
               {template.photoCredit && (
                 <>
@@ -959,48 +1002,6 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
                   }
                 />
               )}
-
-              <p className="subgroup" role="heading" aria-level={3}>{S.layoutGroups.headline}</p>
-              {/* Slider and dropdown both read and write card.fontSize, so they always agree. */}
-              <RangeField
-                id="font-size-range"
-                label={S.fontSize.slider(card.fontSize, TITLE_FONT_MIN, TITLE_FONT_MAX)}
-                min={TITLE_FONT_MIN}
-                max={TITLE_FONT_MAX}
-                step={1}
-                value={card.fontSize}
-                display={`${card.fontSize}px`}
-                onChange={(size) => dispatch({ type: 'SET_FONT_SIZE', size })}
-                before={
-                  <button
-                    type="button"
-                    className="chip"
-                    aria-label={S.fontSize.smaller}
-                    disabled={card.fontSize <= TITLE_FONT_MIN}
-                    onClick={() => dispatch({ type: 'SET_FONT_SIZE', size: card.fontSize - 1 })}
-                  >
-                    <Icon name="minus" />
-                  </button>
-                }
-                after={
-                  <button
-                    type="button"
-                    className="chip"
-                    aria-label={S.fontSize.larger}
-                    disabled={card.fontSize >= TITLE_FONT_MAX}
-                    onClick={() => dispatch({ type: 'SET_FONT_SIZE', size: card.fontSize + 1 })}
-                  >
-                    <Icon name="plus" />
-                  </button>
-                }
-              />
-              <div className="size-row">
-                <label htmlFor="font-size-select">{S.fontSize.exact}</label>
-                <select id="font-size-select" value={card.fontSize} onChange={(e) => dispatch({ type: 'SET_FONT_SIZE', size: Number(e.target.value) })}>
-                  {TITLE_SIZES.map((size) => <option key={size} value={size}>{size}px</option>)}
-                </select>
-                <button type="button" className="button secondary" onClick={fitHeadline}>{S.headline.fit}</button>
-              </div>
 
               <p className="subgroup" role="heading" aria-level={3}>{S.layoutGroups.position}</p>
               <NudgePad
