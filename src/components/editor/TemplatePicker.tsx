@@ -126,8 +126,11 @@ export function TemplatePicker(props: { value: string; onChange: (id: string) =>
                       onClick={() => choose(i)}
                     >
                       <img className="picker-thumb" src={t.thumbnail} alt="" loading="lazy" />
-                      <span className="picker-name">{name(t)}</span>
-                      <span className={`mode-badge mode-${t.mode}`}>{S.modes[t.mode].badge}</span>
+                      {/* Name + badge wrap together, so the badge always follows the name. */}
+                      <span className="picker-text">
+                        <span className="picker-name">{name(t)}</span>
+                        <span className={`mode-badge mode-${t.mode}`}>{S.modes[t.mode].badge}</span>
+                      </span>
                       {t.id === props.value && (
                         <span className="picker-check">
                           <Icon name="check" size={18} />

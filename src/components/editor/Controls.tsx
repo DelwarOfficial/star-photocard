@@ -125,8 +125,11 @@ export function SectionHead(props: { id: string; step: number; title: string; hi
         {props.step}
       </span>
       <span className="section-title">
-        <span className="visually-hidden">{props.step}. </span>
-        {props.title}
+        {/* Heading semantics so screen-reader users can jump between the four steps. */}
+        <span role="heading" aria-level={2}>
+          <span className="visually-hidden">{props.step}. </span>
+          {props.title}
+        </span>
         <small className="section-hint">{props.hint}</small>
       </span>
     </legend>

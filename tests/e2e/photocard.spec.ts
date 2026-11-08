@@ -592,7 +592,8 @@ test.describe('photocard generator', () => {
       }));
       expect(box).toMatchObject({ left: 0, top: 0, width: 1080, height: 100, slotTop: 1250 });
       // Preview paint order: the creative is the topmost element over the strip, not the artwork.
-      await page.locator('.card-ad img').scrollIntoViewIfNeeded();
+      // Centre it: on phones the export bar is fixed to the bottom edge of the screen.
+      await page.locator('.card-ad img').evaluate((el) => el.scrollIntoView({ block: 'center' }));
       const topmost = await page.locator('.card-ad img').evaluate((el: HTMLElement) => {
         const r = el.getBoundingClientRect();
         const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
@@ -900,5 +901,38 @@ test.describe('photocard generator', () => {
       await expect(page.getByRole('button', { name: 'Download PNG' })).toBeEnabled();
       expect(await downloadPng(page)).toMatchObject({ width: CARD_W, height: CARD_H });
     }
+  });
+
+  test('UI structure: overflow error on the headline, export beside the preview, headings, restore only when useful', async ({ page, isMobile }) => {
+    await mockArticle(page, {});
+    await generate(page);
+    // Four step headings (level 2) and the Layout sub-groups (level 3) for screen-reader navigation.
+    await expect(page.getByRole('heading', { level: 2 })).toHaveCount(4);
+    await expect(page.getByRole('heading', { level: 3, name: 'Position' })).toHaveCount(1);
+    // Overflow: the error sits on the headline field, marks it invalid, and fixes in one click.
+    const headline = page.getByLabel('Headline', { exact: true });
+    await headline.fill(Array(30).fill('বাংলা headline').join('\n'));
+    await expect(headline).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.locator('#headline-error')).toContainText('safe area');
+    await expect(page.getByRole('button', { name: 'Download PNG' })).toBeDisabled();
+    await headline.fill('বাংলা headline one two three four five six seven eight');
+    await page.getByLabel('Exact size', { exact: true }).selectOption('120');
+    if (await page.locator('#headline-error').count()) await page.getByRole('button', { name: 'Fit it now' }).click();
+    await expect(page.locator('#headline-error')).toHaveCount(0);
+    await expect(headline).not.toHaveAttribute('aria-invalid', 'true');
+    // Export lives with the preview; on phones it is a bar fixed to the bottom of the screen.
+    await expect(page.locator('.preview-stage .export-actions')).toHaveCount(1);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const bar = (await page.locator('.export-actions').boundingBox())!;
+    const viewport = page.viewportSize()!;
+    if (isMobile) expect(bar.y + bar.height).toBeGreaterThan(viewport.height - 100);
+    expect(bar.y + bar.height).toBeLessThanOrEqual(viewport.height);
+    // "Use the article photo again" only while your own upload replaces the article photo.
+    const restore = page.getByRole('button', { name: 'Use the article photo again' });
+    await expect(restore).toHaveCount(0);
+    await page.locator('#local-image').setInputFiles(UPLOAD_PHOTO);
+    await expect(restore).toBeVisible();
+    await restore.click();
+    await expect(restore).toHaveCount(0);
   });
 });

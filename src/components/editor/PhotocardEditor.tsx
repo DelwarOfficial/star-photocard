@@ -727,9 +727,19 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
                 rows={3}
                 value={card.title}
                 placeholder={S.headline.placeholder}
-                aria-describedby="headline-help headline-stats"
+                aria-describedby={headlineOverflow ? 'headline-error headline-help headline-stats' : 'headline-help headline-stats'}
+                aria-invalid={headlineOverflow || undefined}
                 onChange={(e) => dispatch({ type: 'SET_TITLE', title: e.target.value })}
               />
+              {/* The overflow error sits on the field that causes it, with the fix one click away. */}
+              {headlineOverflow && (
+                <div id="headline-error" className="field-error field-error-action" role="alert">
+                  <span>{S.headline.overflow}</span>
+                  <button type="button" className="button secondary compact" onClick={fitHeadline}>
+                    {S.headline.fitNow}
+                  </button>
+                </div>
+              )}
               <p id="headline-stats" className="word-hint" aria-live="off">
                 {(() => {
                   const words = card.title.trim() ? card.title.trim().split(/\s+/u).length : 0;
@@ -874,6 +884,7 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
           <section aria-labelledby="design-heading">
             <fieldset disabled={exporting !== 'idle'}>
               <SectionHead id="design-heading" step={3} title={S.sections.layout.title} hint={S.sections.layout.hint} />
+              {template.photo && <p className="subgroup" role="heading" aria-level={3}>{S.layoutGroups.photo}</p>}
 
               {template.photo && isArticle && (
                 <>
@@ -884,7 +895,8 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
                     accept="image/*"
                     onChange={(e) => chooseLocalImage(e.target.files?.[0])}
                   />
-                  {lastRemoteImage && (
+                  {/* Only useful while your own upload replaces the article photo. */}
+                  {lastRemoteImage && card.image.kind === 'local' && (
                     <div className="input-action">
                       <button type="button" className="button secondary" onClick={restoreArticleImage}>
                         {S.upload.restore}
@@ -948,6 +960,7 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
                 />
               )}
 
+              <p className="subgroup" role="heading" aria-level={3}>{S.layoutGroups.headline}</p>
               {/* Slider and dropdown both read and write card.fontSize, so they always agree. */}
               <RangeField
                 id="font-size-range"
@@ -988,8 +1001,8 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
                 </select>
                 <button type="button" className="button secondary" onClick={fitHeadline}>{S.headline.fit}</button>
               </div>
-              {headlineOverflow && <p className="field-error" role="alert">{S.headline.overflow}</p>}
 
+              <p className="subgroup" role="heading" aria-level={3}>{S.layoutGroups.position}</p>
               <NudgePad
                 layers={layers}
                 selected={activeLayer}
@@ -999,6 +1012,7 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
                 onReset={() => resetLayer(activeLayer)}
               />
 
+              <p className="subgroup" role="heading" aria-level={3}>{S.layoutGroups.qrAd}</p>
               {template.qr && (
                 <div className="qr-toggle">
                   <input
@@ -1052,52 +1066,6 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
             </fieldset>
           </section>
 
-          <section aria-labelledby="export-heading" aria-busy={exporting !== 'idle'}>
-            <fieldset disabled={exporting !== 'idle'}>
-              <SectionHead id="export-heading" step={4} title={S.sections.export.title} hint={S.sections.export.hint} />
-              <div className="export-actions">
-                <button
-                  type="button"
-                  className="button primary"
-                  disabled={!canExport || exporting !== 'idle'}
-                  onClick={() => void download()}
-                  aria-keyshortcuts="D"
-                >
-                  {exporting === 'download' ? <span className="spinner" aria-hidden="true" /> : <Icon name="download" size={18} />}
-                  {exporting === 'download' ? S.export.downloading : S.export.download}
-                </button>
-                <button
-                  type="button"
-                  className="button secondary"
-                  disabled={!canExport || exporting !== 'idle'}
-                  onClick={() => void copy()}
-                  aria-keyshortcuts="C"
-                  title={clipboardSupported ? S.export.copyTitle : S.export.copyUnsupportedTitle}
-                >
-                  {exporting === 'copy' ? <span className="spinner" aria-hidden="true" /> : <Icon name="copy" size={18} />}
-                  {exporting === 'copy' ? S.export.copying : S.export.copy}
-                </button>
-              </div>
-              {needsUpload ? (
-                <p className="field-note">{S.export.needsPhoto}</p>
-              ) : (
-                !canExport && (
-                  <p className="field-note">
-                    {card.loadStatus === 'loading'
-                      ? S.export.waitForArticle
-                      : card.title.trim() === ''
-                        ? S.export.needsHeadline
-                        : S.export.fixHeadline}
-                  </p>
-                )
-              )}
-              {!clipboardSupported && <p className="field-note">{S.export.copyUnsupportedNote}</p>}
-            </fieldset>
-          </section>
-
-          <p className={`status tone-${status.tone}`} role="status" aria-live="polite">
-            {status.text}
-          </p>
         </div>
 
         <section className="preview-stage" aria-label={S.sections.preview} aria-busy={loading || exporting !== 'idle'}>
@@ -1220,6 +1188,54 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
               )}
             </div>
           </div>
+          {/* Export lives with the preview: on desktop it stays on screen with the card; on
+              tablets and phones the actions become a fixed bottom bar (see .export-panel CSS). */}
+          <section className="export-panel" aria-labelledby="export-heading" aria-busy={exporting !== 'idle'}>
+            <fieldset disabled={exporting !== 'idle'}>
+              <SectionHead id="export-heading" step={4} title={S.sections.export.title} hint={S.sections.export.hint} />
+              <div className="export-actions">
+                <button
+                  type="button"
+                  className="button primary"
+                  disabled={!canExport || exporting !== 'idle'}
+                  onClick={() => void download()}
+                  aria-keyshortcuts="D"
+                >
+                  {exporting === 'download' ? <span className="spinner" aria-hidden="true" /> : <Icon name="download" size={18} />}
+                  {exporting === 'download' ? S.export.downloading : S.export.download}
+                </button>
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={!canExport || exporting !== 'idle'}
+                  onClick={() => void copy()}
+                  aria-keyshortcuts="C"
+                  title={clipboardSupported ? S.export.copyTitle : S.export.copyUnsupportedTitle}
+                >
+                  {exporting === 'copy' ? <span className="spinner" aria-hidden="true" /> : <Icon name="copy" size={18} />}
+                  {exporting === 'copy' ? S.export.copying : S.export.copy}
+                </button>
+              </div>
+              {needsUpload ? (
+                <p className="field-note">{S.export.needsPhoto}</p>
+              ) : (
+                !canExport && (
+                  <p className="field-note">
+                    {card.loadStatus === 'loading'
+                      ? S.export.waitForArticle
+                      : card.title.trim() === ''
+                        ? S.export.needsHeadline
+                        : S.export.fixHeadline}
+                  </p>
+                )
+              )}
+              {!clipboardSupported && <p className="field-note">{S.export.copyUnsupportedNote}</p>}
+            </fieldset>
+          </section>
+
+          <p className={`status tone-${status.tone}`} role="status" aria-live="polite">
+            {status.text}
+          </p>
           <p className="dimensions">
             <span className="badge">{S.export.previewScale(EXPORT_WIDTH, EXPORT_HEIGHT, (scale / EXPORT_SCALE).toFixed(2))}</span>
           </p>

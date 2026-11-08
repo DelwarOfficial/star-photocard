@@ -101,6 +101,7 @@ export const S = {
     label: 'Headline',
     placeholder: 'Type the headline (in Bengali)',
     fit: 'Fit headline',
+    fitNow: 'Fit it now',
     overflow: 'Headline exceeds its safe area. Fit it, shorten it, or move it back before export.',
     stats: (words: number, size: number) => `${words} ${words === 1 ? 'word' : 'words'} · headline size ${size}px`,
     helpHighlight:
@@ -168,6 +169,8 @@ export const S = {
     altCustom: 'QR code linking to starnews.com.bd',
   },
   layoutReset: 'Reset layout to the template defaults',
+  /** Sub-group headings inside the Layout section. */
+  layoutGroups: { photo: 'Photo', headline: 'Headline', position: 'Position', qrAd: 'QR code & ad strip' },
   ad: {
     toggle: 'Ad strip at the bottom',
     upload: 'Ad creative (JPG, PNG or WebP, up to 8 MB)',

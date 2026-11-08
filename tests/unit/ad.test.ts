@@ -8,7 +8,11 @@ import { createCardState, layoutDefaults } from '../../src/lib/card/types';
 
 // Exact-case listing: existsSync is case-insensitive on Windows/macOS, but the Workers asset server is not.
 const TEMPLATE_FILES = readdirSync(fileURLToPath(new URL('../../public/templates', import.meta.url)));
-const served = (path: string) => TEMPLATE_FILES.includes(path.replace('/templates/', ''));
+const THUMB_FILES = readdirSync(fileURLToPath(new URL('../../public/templates/thumbs', import.meta.url)));
+const served = (path: string) =>
+  path.startsWith('/templates/thumbs/')
+    ? THUMB_FILES.includes(path.replace('/templates/thumbs/', ''))
+    : TEMPLATE_FILES.includes(path.replace('/templates/', ''));
 
 const AD = { src: 'blob:ad', width: AD_CREATIVE_SIZE.width, height: AD_CREATIVE_SIZE.height };
 

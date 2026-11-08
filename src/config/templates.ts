@@ -30,7 +30,7 @@ export type TemplateDefinition = Readonly<{
   label: string;
   /** Public asset path for the full-size template PNG. */
   src: string;
-  /** Thumbnail path. Reuses src until dedicated thumbnails exist. */
+  /** Picker thumbnail: the artwork over the demo photo (built by scripts/thumbnails.mjs). */
   thumbnail: string;
   language: Language;
   mode: CardMode;
@@ -164,7 +164,7 @@ export const templates: readonly TemplateDefinition[] = [
     id: 'common-card',
     label: 'Photo on top',
     src: '/templates/common-card.png',
-    thumbnail: '/templates/common-card.png',
+    thumbnail: '/templates/thumbs/common-card.webp',
     language: 'bn',
     mode: 'article',
     requiresImage: false,
@@ -195,7 +195,7 @@ export const templates: readonly TemplateDefinition[] = [
     id: 'common-card-without-details',
     label: 'Photo on top (no category)',
     src: '/templates/common-card-without-details.png',
-    thumbnail: '/templates/common-card-without-details.png',
+    thumbnail: '/templates/thumbs/common-card-without-details.webp',
     language: 'bn',
     mode: 'article',
     requiresImage: false,
@@ -228,7 +228,7 @@ export const templates: readonly TemplateDefinition[] = [
     id: 'common-card-bottom',
     label: 'Photo at bottom',
     src: '/templates/common-card-bottom.png',
-    thumbnail: '/templates/common-card-bottom.png',
+    thumbnail: '/templates/thumbs/common-card-bottom.webp',
     language: 'bn',
     mode: 'article',
     requiresImage: false,
@@ -262,7 +262,7 @@ export const templates: readonly TemplateDefinition[] = [
     id: 'special-card-top',
     label: 'Full photo, headline on top',
     src: '/templates/special-card-top.png',
-    thumbnail: '/templates/special-card-top.png',
+    thumbnail: '/templates/thumbs/special-card-top.webp',
     language: 'bn',
     mode: 'article',
     requiresImage: false,
@@ -293,7 +293,7 @@ export const templates: readonly TemplateDefinition[] = [
     id: 'special-card-bottom',
     label: 'Full photo, headline at bottom',
     src: '/templates/special-card-bottom.png',
-    thumbnail: '/templates/special-card-bottom.png',
+    thumbnail: '/templates/thumbs/special-card-bottom.webp',
     language: 'bn',
     mode: 'article',
     requiresImage: false,
@@ -328,7 +328,7 @@ export const templates: readonly TemplateDefinition[] = [
     id: 'just-in',
     label: 'Just In',
     src: '/templates/just-in.png',
-    thumbnail: '/templates/just-in.png',
+    thumbnail: '/templates/thumbs/just-in.webp',
     language: 'bn',
     mode: 'custom',
     requiresImage: true,
@@ -365,7 +365,7 @@ export const templates: readonly TemplateDefinition[] = [
     id: 'breaking-news',
     label: 'Breaking News',
     src: '/templates/breaking_news.png',
-    thumbnail: '/templates/breaking_news.png',
+    thumbnail: '/templates/thumbs/breaking_news.webp',
     language: 'bn',
     mode: 'custom',
     requiresImage: false,
