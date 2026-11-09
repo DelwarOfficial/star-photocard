@@ -24,9 +24,9 @@
     "deploy:production": "node scripts/environment.mjs production deploy"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "14.3.4",
-    "@astrojs/react": "7.0.1",
-    "astro": "7.3.8",
+    "@astrojs/cloudflare": "14.4.6",
+    "@astrojs/react": "7.1.4",
+    "astro": "7.4.7",
     "html2canvas": "1.4.1",
     "qrcode": "1.5.4",
     "react": "19.3.0",
@@ -34,7 +34,7 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@astrojs/check": "0.9.10",
+    "@astrojs/check": "0.9.12",
     "@cloudflare/workers-types": "5.20261009.1",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "1.63.0",
