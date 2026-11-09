@@ -1,17 +1,139 @@
 # Star News Photocard Generator
 
-Create editable Star News article and custom cards, then export a 1600 x 2000 PNG.
+Create editable Star News article and custom cards, preview branded layouts, and export a 1600 x 2000 PNG entirely in the browser.
 
 ## Features
 
-- Six portrait templates: four article layouts and two custom layouts.
+- Seven portrait templates: five article layouts and two custom layouts, each with an advertisement artwork variant.
 - Article headline, approved photo and category fetched from Star News; content remains editable.
 - Today's Bengali date in Asia/Dhaka, filled after hydration, without a leading zero. The card uses the editable current date, not the article's publication date.
 - Self-hosted Bengali/English card fonts, headline highlighting, a 30-120px size dropdown and a **Fit headline** action. Overflow blocks export.
 - Photo upload, bounded drag/zoom, photo-credit presets and a **Show whole photo (no crop)** toggle. Templates default to `cover`; the toggle selects `contain` in preview and export.
+- Optional advertisement strip with an uploaded creative; recommended artwork size is **1600 x 148 pixels**. Ad mode stays off until a creative is provided, and the final card remains 1600 x 2000 pixels.
 - Optional QR codes, PNG download and clipboard copy where supported. Keyboard shortcuts are enabled by default and can be disabled with the checkbox.
 
 Built with Astro SSR on Cloudflare Workers, a React editor island, TypeScript, html2canvas, Vitest, Playwright and Wrangler.
+
+
+Reviewed against repository source on **November 9, 2026**. This document describes the implemented system; remote Worker names, active secrets, and live deployment status require confirmation in the deployment account.
+
+## Contents
+
+- [Features](#features)
+- [Architecture blueprint](#architecture-blueprint)
+- [Quickstart](#quickstart)
+- [Commands](#commands)
+- [Templates](#templates)
+- [Configuration](#configuration)
+- [Deployment](#deployment)
+- [Testing](#testing)
+- [Project structure](#project-structure)
+- [Security notes](#security-notes)
+- [Troubleshooting](#troubleshooting)
+- [License and contributing](#license-and-contributing)
+
+## Architecture blueprint
+
+### Runtime and ownership
+
+This is a stateless **Astro SSR application on Cloudflare Workers**, with a React editor island hydrated using `client:load`. Astro serves the document shell and API routes; React owns the interactive composition. PNG rendering runs in the browser, rather than on a server.
+
+There is no application database, account system, saved-project service, or server-side image-rendering queue. Astro sessions are disabled. Article metadata and approved remote images use the Workers Cache API as a best-effort performance layer; it is not durable project storage. Uploaded photos and advertisement creatives remain browser-local Blob URLs.
+
+```mermaid
+flowchart TB
+    User[User browser] --> Worker[Cloudflare Worker: Astro SSR]
+    Worker --> Middleware[Security header middleware]
+    Middleware --> Page[Astro page and document shell]
+    Page --> Editor[React editor island]
+    Worker --> Assets[Static assets: templates, fonts, demo image]
+    Editor -->|POST /api/article| Article[Article API]
+    Article --> ArticleLimit[Article rate limiter]
+    ArticleLimit --> Extract[URL policy, bounded fetch, metadata extraction]
+    Extract --> News[Star News HTTPS pages and images]
+    Article --> Cache[Workers Cache API]
+    Article --> Signing[HMAC image-link signing]
+    Editor -->|GET /api/image?token| Image[Image API]
+    Image --> ImageLimit[Image rate limiter]
+    ImageLimit --> Verify[Verify token and revalidate URL]
+    Verify --> News
+    Image --> Cache
+    Image -->|Validated image bytes| Blob[Browser Blob URL]
+    Blob --> Editor
+    Upload[Local photo and ad uploads] --> Editor
+    Editor --> Renderer[Shared layout helpers and html2canvas]
+    Renderer --> PNG[PNG download or clipboard]
+```
+
+The diagram shows responsibilities, not exact execution order. Each route applies its limiter before reading or fetching content; the image route verifies its token before looking up image bytes in cache.
+
+### Component map
+
+| Component | Responsibility | Source |
+| --- | --- | --- |
+| Astro shell | SSR entry, signing readiness, React hydration | [index.astro](src/pages/index.astro), [AppLayout.astro](src/layouts/AppLayout.astro) |
+| Editor | Forms, generation/cancellation, uploads, drag/nudge, preview, export feedback | [PhotocardEditor.tsx](src/components/editor/PhotocardEditor.tsx), [Controls.tsx](src/components/editor/Controls.tsx) |
+| State model | Immutable card state, reducer actions, template defaults, reset behavior | [types.ts](src/lib/card/types.ts), [reducer.ts](src/lib/card/reducer.ts) |
+| Template registry | Seven base layouts, ad variants, layer bounds, export dimensions | [templates.ts](src/config/templates.ts) |
+| Shared rendering | Photo geometry, text/QR/ad styling, headline bounds, renderer interface | [geometry.ts](src/lib/card/geometry.ts), [layerStyles.ts](src/lib/card/layerStyles.ts), [titleBounds.ts](src/lib/card/titleBounds.ts), [renderer.ts](src/lib/card/renderer.ts) |
+| PNG renderer | Decode assets, wait for fonts, build offscreen DOM, render PNG Blob | [html2canvasRenderer.ts](src/lib/card/html2canvasRenderer.ts) |
+| Article pipeline | URL normalization, inert HTML extraction, image candidate probing | [article.ts](src/pages/api/article.ts), [extractArticle.ts](src/lib/article/extractArticle.ts) |
+| Image pipeline | Signed-token verification, URL revalidation, bounded image delivery | [image.ts](src/pages/api/image.ts), [imageToken.ts](src/lib/security/imageToken.ts) |
+| Runtime safeguards | Request limits, fail-closed rate limiting, bounded outbound requests, hashed cache keys | [security](src/lib/security), [middleware.ts](src/middleware.ts) |
+| Deployment | Environment selection, generated-config validation, Worker deployment | [environment.mjs](scripts/environment.mjs), [wrangler.jsonc](wrangler.jsonc) |
+
+### Article-to-card sequence
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant E as React editor
+    participant A as POST /api/article
+    participant N as Star News
+    participant I as GET /api/image
+    participant R as Browser PNG renderer
+    U->>E: Select template and submit article URL
+    E->>A: JSON request with URL
+    A->>A: Rate limit, validate body and URL, check cache
+    opt Metadata cache miss
+        A->>N: Fetch bounded HTML and probe photo candidates
+        N-->>A: Metadata and approved image candidate
+        A->>A: Sign image reference and cache metadata
+    end
+    A-->>E: Metadata and optional signed image link
+    opt Approved photo link available
+        E->>I: Request signed image
+        I->>I: Rate limit, verify token, validate URL, check cache
+        opt Image cache miss
+            I->>N: Fetch bounded image bytes
+            N-->>I: Supported image
+        end
+        I-->>E: Image bytes
+        E->>E: Decode and retain browser Blob URL
+    end
+    U->>E: Edit text, photo, QR, optional ad
+    E->>E: Validate headline bounds and required photo
+    U->>R: Download or copy PNG
+    R->>R: Decode assets, wait for fonts, render offscreen DOM
+    R-->>U: 1600 x 2000 PNG
+```
+
+Custom cards skip the article API. Just In requires a local photo; Breaking News uses no main photo. Missing/rejected article candidates can use the bundled demo image, but failure to download an approved photo reports an error and preserves the current composition.
+
+### Preview and export contract
+
+The registry defines geometry in **1080 x 1350 layout units**, scaled from **1600 x 2000 artwork pixels**. React preview and the offscreen renderer share geometry and layer-style helpers. The export renderer captures an immutable snapshot, resolves the normal/ad template variant, checks required assets and headline bounds, and produces a PNG at the fixed export size.
+
+Advertisement mode changes the artwork and selected layout coordinates while reserving a bottom strip. A creative upload enables it; switching it off restores the normal variant without changing the export dimensions. Keep geometry in the registry rather than introducing independent preview/export coordinates.
+
+### API contract
+
+| Endpoint | Input | Success | Key failure behavior |
+| --- | --- | --- | --- |
+| `POST /api/article` | JSON object containing only `url`; trimmed string up to 2048 characters | `{ data: { canonicalUrl, title, category, publishedAt, formattedDate, dateSource, language, imageUrl?, imageNotice? } }` | Structured `{ error: { code, message, requestId } }`; validation, upstream, size, timeout, and limiter failures |
+| `GET /api/image?token=...` | Signed article-image reference | Validated image bytes and content headers | Invalid token 400/403, missing signing configuration 500, upstream image failure 502; limiter failures 429/503 |
+
+Article responses use `Cache-Control: no-store` for clients while metadata is cached internally. Image tokens are signed, not encrypted; they authorize bounded retrieval of a validated URL and do not represent a user session. Neither endpoint accepts arbitrary third-party image hosts.
 
 ## Quickstart
 
@@ -33,7 +155,7 @@ npm run dev
 Open **http://localhost:4321** (or the URL printed by Astro).
 
 1. Select an article template, paste an HTTPS Star News article URL and click **Generate**.
-2. Edit the headline, date and category. Replace the photo with a local upload if needed. Use **Fit headline** if overflow prevents export.
+2. Edit the headline, date and category. Replace the photo with a local upload if needed. Use **Fit headline** if overflow prevents export. Optionally upload an advertisement creative in the layout controls to enable the ad strip.
 3. Click **Download PNG** for a 1600 x 2000 image. **Copy PNG** requires a supported clipboard API and a secure context.
 
 For a card without an article, select **Just In**, upload a photo and enter a headline; or select **Breaking News** and enter a headline. No article fetch is needed in custom mode.
@@ -67,6 +189,7 @@ The registry is [`src/config/templates.ts`](src/config/templates.ts). Layout coo
 | Template ID / label | Mode | Photo | QR | Meta rows |
 | --- | --- | --- | --- | --- |
 | `common-card` / Photo on top | Article | Upper window | Yes | 3 |
+| `common-card-without-details` / Photo on top (no category) | Article | Upper window | Yes | 2 |
 | `common-card-bottom` / Photo at bottom | Article | Lower window | Yes | 3 |
 | `special-card-top` / Full photo, headline on top | Article | Full card | Yes | 3 |
 | `special-card-bottom` / Full photo, headline at bottom | Article | Full card | Yes | 3 |
@@ -138,15 +261,12 @@ openssl rand -hex 32   # or: node -e "console.log(require('crypto').randomBytes(
 
 | Environment | Worker | Command |
 | --- | --- | --- |
-| Live site (Workers Builds, `starphotocard.starnewsdigital1.workers.dev`) | `starphotocard` | `npx wrangler secret put IMAGE_TOKEN_SECRET --name starphotocard` |
 | Staging (`wrangler.jsonc` → `env.staging`) | `star-news-photocard-staging` | `npx wrangler secret put IMAGE_TOKEN_SECRET --env staging` |
 | Production (`wrangler.jsonc` → `env.production`) | `star-news-photocard-production` | `npx wrangler secret put IMAGE_TOKEN_SECRET --env production` |
 | Local dev / `npm run preview` | — | `.dev.vars` (see Quickstart) |
 | CI | — | the workflow writes a throwaway `.dev.vars` per run |
 
-The live Worker is named `starphotocard` in Cloudflare, which differs from `wrangler.jsonc`'s `star-news-photocard` — so it needs `--name`; a plain `wrangler secret put` targets the wrong Worker. Alternatively set it in the dashboard: **Workers & Pages → starphotocard → Settings → Variables and Secrets → Add → Type: Secret**. Secrets persist across Workers Builds deploys.
-
-Check it took effect: `npx wrangler secret list --name starphotocard` lists `IMAGE_TOKEN_SECRET`, and generating a card from an article with a photo shows that photo (no signing warning in the status line).
+For an externally configured Worker name (for example, one selected in Workers Builds), confirm the actual name in Cloudflare before setting secrets. Use `npx wrangler secret put IMAGE_TOKEN_SECRET --name <actual-worker-name>` and `npx wrangler secret list --name <actual-worker-name>` for that target. The repository configuration alone does not establish which Worker currently serves a live domain.
 
 The app deploys to **Cloudflare Workers**, with static assets and SSR/API routes, not Cloudflare Pages. Current configuration uses compatibility date `2026-09-04`, `nodejs_compat`, and observability. The GitHub CI workflow validates changes; it does not deploy them.
 
@@ -161,7 +281,7 @@ npx playwright install --with-deps chromium
 npm run test:e2e
 ```
 
-Use the local `.dev.vars` secret created during quickstart. E2E tests use desktop Chromium and Pixel 7 emulation against Wrangler's local Workers runtime on `127.0.0.1:8788`. They cover editing, QR targets, image fit, fallback, cancellation, overflow, responsive layout and PNG output. Article journeys mock the API; they do not verify the live news site's availability.
+Use the local `.dev.vars` secret created during quickstart. E2E tests use desktop Chromium and Pixel 7 emulation against Wrangler's local Workers runtime on `127.0.0.1:8788`. They cover editing, QR targets, image fit, fallback, cancellation, overflow, responsive layout and PNG output. Most article journeys mock the API. `live-article.spec.ts` additionally exercises a real Star News article and skips with a reason when the upstream site is unreachable; a skipped live check does not establish upstream availability.
 
 Vitest runs `tests/unit/` and `tests/integration/`. Integration tests execute the actual route handlers and Cache API in Miniflare with mocked outbound requests. `.github/workflows/ci.yml` runs checks, lint, Vitest and build, followed by Playwright with a throwaway secret on pushes to `main` and pull requests. Failed browser runs upload `playwright-report/` as an artifact; local failure details are also in `test-results/`.
 
