@@ -346,6 +346,7 @@ export function normalizeImageUrl(imageUrl: unknown, articleUrl: string): string
   if (parsed.protocol !== 'https:') return '';
   if (parsed.username || parsed.password) return '';
   if (!isStarNewsHost(parsed.hostname)) return '';
+  if (parsed.port !== '') return ''; // default HTTPS port only, same rule as article URLs
   parsed.hash = '';
   return parsed.href;
 }

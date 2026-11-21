@@ -13,6 +13,13 @@ export const prerender = false;
 
 const MAX_IMAGE_PROBES = 4;
 const IMAGE_PROBE_TIMEOUT_MS = 5_000;
+/**
+ * Whole-import budgets (wall clock, across all redirects): the page must arrive within
+ * ARTICLE_DEADLINE_MS; photo discovery gets IMAGE_BUDGET_MS in total, and when it runs out
+ * the article is still returned, just without a photo. Worst case ≈ 25 s instead of ≈ 120 s.
+ */
+const ARTICLE_DEADLINE_MS = 15_000;
+const IMAGE_BUDGET_MS = 10_000;
 
 const requestSchema = z.object({ url: z.string().trim().min(1).max(2048) }).strict();
 
@@ -92,7 +99,7 @@ export async function handleArticle(request: Request, clientAddress: string | un
       cache = undefined;
     }
 
-    const fetched = await fetchArticleHtml(startUrl);
+    const fetched = await fetchArticleHtml(startUrl, { deadline: AbortSignal.timeout(ARTICLE_DEADLINE_MS) });
     const article = extractArticle(fetched.html, fetched.url);
 
     // Probe image candidates in order (headers + magic bytes only); first valid wins.
@@ -108,9 +115,11 @@ export async function handleArticle(request: Request, clientAddress: string | un
         console.warn(JSON.stringify({ requestId, event: 'image_signing_unconfigured', hint: 'set IMAGE_TOKEN_SECRET (≥32 chars) in .dev.vars or as a Worker secret' }));
       }
     } else {
+      const imageBudget = AbortSignal.timeout(IMAGE_BUDGET_MS);
       for (const candidate of article.imageCandidates.slice(0, MAX_IMAGE_PROBES)) {
+        if (imageBudget.aborted) break; // out of time: return the article without a photo
         try {
-          await probeImage(new URL(candidate), { timeoutMs: IMAGE_PROBE_TIMEOUT_MS });
+          await probeImage(new URL(candidate), { timeoutMs: IMAGE_PROBE_TIMEOUT_MS, deadline: imageBudget });
           const token = await signImageUrl(candidate, secret);
           imageUrl = `/api/image?token=${encodeURIComponent(token)}`;
           break;

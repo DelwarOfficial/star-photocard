@@ -523,16 +523,28 @@ test.describe('photocard generator', () => {
     await expect(pickerButton(page)).toContainText('Breaking News');
   });
 
-  test('an approved image download failure preserves the card and blocks empty export', async ({ page }) => {
+  test('a failed photo download keeps the article, leaves the photo empty and blocks export until a photo is added', async ({ page }) => {
     await page.route('**/api/image**', (route) =>
       route.fulfill({ status: 403, contentType: 'application/json', body: '{"error":{"code":"IMAGE_ERROR"}}' }),
     );
-    await mockArticle(page, { imageUrl: '/api/image?token=expired' });
+    await mockArticle(page, { imageUrl: '/api/image?token=expired', category: 'খেলা' });
     await open(page);
     await page.getByLabel('Star News article link').fill(ARTICLE_URL);
     await page.getByRole('button', { name: 'Generate', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('couldn’t load the card photo');
+    // The article survives: headline, category and the QR's article link.
+    await expect(page.getByLabel('Headline', { exact: true })).toHaveValue('পরীক্ষামূলক *শিরোনাম* এখানে');
+    await expect(page.locator('.card-pill')).toHaveText('খেলা');
+    await expectQrEncodes(page, ARTICLE_URL);
+    // No wrong photo: the window is empty and export waits for a real one.
+    await expect(page.locator('.photo')).toHaveCount(0);
+    await expect(page.getByText(/^Photo source:/)).toContainText('couldn’t be loaded');
     await expect(page.getByRole('button', { name: 'Download PNG' })).toBeDisabled();
+    await expect(page.getByText('Add a photo for this card to enable export.')).toBeVisible();
+    // Uploading your own photo unblocks it.
+    await page.locator('#local-image').setInputFiles(UPLOAD_PHOTO);
+    await expect(page.locator('.photo')).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Download PNG' })).toBeEnabled();
   });
 
   test('every template renders its artwork and exports at full size', async ({ page }) => {

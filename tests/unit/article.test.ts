@@ -17,18 +17,22 @@ import { fetchArticleHtml, fetchImageBytes, probeImage, verifyImageSignature } f
 import { signImageUrl, verifyImageToken } from '../../src/lib/security/imageToken';
 
 describe('Star News URL policy', () => {
-  it.each(['starnews.com.bd', 'www.starnews.com.bd', 'english.starnews.com.bd'])('accepts %s', (host) => {
+  it.each(['starnews.com.bd', 'www.starnews.com.bd', 'WWW.StarNews.com.bd', 'starnews.com.bd.'])('accepts %s', (host) => {
+    // Case and a trailing dot normalise to an allowed host.
     expect(isStarNewsHost(host)).toBe(true);
   });
-  it.each(['evilstarnews.com.bd', 'starnews.com.bd.evil.test', 'localhost', 'starnews.com.bd.'])(
-    'handles %s',
+  it.each(['english.starnews.com.bd', 'cdn.starnews.com.bd', 'a.www.starnews.com.bd', 'evilstarnews.com.bd', 'starnews.com.bd.evil.test', 'localhost'])(
+    'rejects %s (exact allowlist, no wildcard subdomains)',
     (host) => {
-      // trailing-dot form normalizes to the root host and is accepted; lookalikes are rejected.
-      const normalized = host.toLowerCase().replace(/\.+$/u, '');
-      const expected = normalized === 'starnews.com.bd' || normalized.endsWith('.starnews.com.bd');
-      expect(isStarNewsHost(host)).toBe(expected);
+      expect(isStarNewsHost(host)).toBe(false);
     },
   );
+  it('accepts only the default HTTPS port', () => {
+    expect(normalizeArticleUrl('https://starnews.com.bd:443/country/1/x.html').href).toBe('https://starnews.com.bd/country/1/x.html');
+    expect(() => normalizeArticleUrl('https://starnews.com.bd:8443/country/1/x.html')).toThrow('INVALID_HOST');
+    expect(() => resolveRedirect(new URL('https://starnews.com.bd/a'), 'https://www.starnews.com.bd:8080/b')).toThrow('REDIRECT_REJECTED');
+    expect(normalizeImageUrl('https://starnews.com.bd:8443/a.jpg', 'https://starnews.com.bd/x')).toBe('');
+  });
   it('keeps the legacy isRtvHost alias working', () => {
     expect(isRtvHost('www.starnews.com.bd')).toBe(true);
     expect(isRtvHost('evil.test')).toBe(false);
@@ -213,10 +217,52 @@ describe('bounded fetch', () => {
     expect(shortArticleUrl('https://starnews.com.bd/country/25819/accused-in-x-recovered.html')).toBe('https://starnews.com.bd/country/25819');
     expect(shortArticleUrl('https://starnews.com.bd/country/25819/slug.html?utm=1#top')).toBe('https://starnews.com.bd/country/25819');
     expect(shortArticleUrl('https://starnews.com.bd/country/25819/')).toBe('https://starnews.com.bd/country/25819');
-    // Fewer than two segments are kept whole.
-    expect(shortArticleUrl('https://www.starnews.com.bd/bangla-news')).toBe('https://www.starnews.com.bd/bangla-news');
+    expect(shortArticleUrl('https://starnews.com.bd/country/25819')).toBe('https://starnews.com.bd/country/25819');
     expect(shortArticleUrl('https://starnews.com.bd/')).toBe('https://starnews.com.bd');
     expect(shortArticleUrl('not a url')).toBe('not a url');
+  });
+
+  it('keeps the full URL (minus the hash) for any route that is not section/ID', () => {
+    // These would change destination if cut to two segments or stripped of their query.
+    for (const url of [
+      'https://www.starnews.com.bd/bangla-news',
+      'https://starnews.com.bd/english/country/25819/slug.html',
+      'https://starnews.com.bd/country/latest/slug.html',
+      'https://starnews.com.bd/search?q=dhaka',
+      'https://starnews.com.bd/country/25819/slug.html/extra',
+    ]) {
+      expect(shortArticleUrl(url)).toBe(url);
+    }
+    expect(shortArticleUrl('https://starnews.com.bd/search?q=dhaka#top')).toBe('https://starnews.com.bd/search?q=dhaka');
+  });
+
+  it('one deadline bounds the whole redirect chain (the per-hop timer restarts, the deadline does not)', async () => {
+    // Each hop answers a redirect after 40 ms: well inside the 1 s per-hop timeout,
+    // but three hops overrun a 100 ms overall deadline.
+    let hop = 0;
+    const slowRedirects = (async (_url: string, init?: RequestInit) => {
+      await new Promise<void>((resolve, reject) => {
+        const t = setTimeout(resolve, 40);
+        init?.signal?.addEventListener('abort', () => { clearTimeout(t); reject(init.signal!.reason); });
+      });
+      hop += 1;
+      return new Response(null, { status: 302, headers: { location: `https://starnews.com.bd/hop${hop}` } });
+    }) as typeof fetch;
+    const started = Date.now();
+    await expect(
+      fetchArticleHtml(new URL('https://starnews.com.bd/a'), { timeoutMs: 1_000, deadline: AbortSignal.timeout(100), fetchImpl: slowRedirects }),
+    ).rejects.toMatchObject({ name: 'TimeoutError' });
+    expect(Date.now() - started).toBeLessThan(500);
+  });
+
+  it('an image deadline stops a stalled probe early', async () => {
+    const stalled = ((_url: string, init?: RequestInit) =>
+      new Promise<Response>((_, reject) => init?.signal?.addEventListener('abort', () => reject(init.signal!.reason)))) as typeof fetch;
+    const started = Date.now();
+    await expect(
+      probeImage(new URL('https://starnews.com.bd/a.jpg'), { timeoutMs: 5_000, deadline: AbortSignal.timeout(80), fetchImpl: stalled }),
+    ).rejects.toMatchObject({ name: 'TimeoutError' });
+    expect(Date.now() - started).toBeLessThan(1_000);
   });
 
   it('enforces streamed byte caps', async () => {

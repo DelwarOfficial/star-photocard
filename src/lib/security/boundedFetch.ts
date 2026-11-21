@@ -5,6 +5,15 @@ export const IMAGE_MAX_BYTES = 8 * 1024 * 1024;
 export const FETCH_TIMEOUT_MS = 10_000;
 export const MAX_REDIRECTS = 3;
 
+/**
+ * Per-hop timeout, optionally bounded by a caller's overall deadline: a redirect chain
+ * restarts the per-hop timer, but never the shared deadline.
+ */
+function hopSignal(timeoutMs: number, deadline?: AbortSignal): AbortSignal {
+  const hop = AbortSignal.timeout(timeoutMs);
+  return deadline ? AbortSignal.any([hop, deadline]) : hop;
+}
+
 const HTML_UA = 'Star News Photocard/1.0 (+https://starnews.com.bd/)';
 
 /** truncated: the page exceeded the byte cap and only its first maxBytes (with a complete <head>) were read. */
@@ -24,7 +33,7 @@ export type FetchedImage = { bytes: Uint8Array; contentType: string; url: URL };
  */
 export async function fetchArticleHtml(
   startUrl: URL,
-  options: { maxBytes?: number; timeoutMs?: number; fetchImpl?: typeof fetch } = {},
+  options: { maxBytes?: number; timeoutMs?: number; fetchImpl?: typeof fetch; deadline?: AbortSignal } = {},
 ): Promise<FetchedHtml> {
   const maxBytes = options.maxBytes ?? HTML_MAX_BYTES;
   const timeoutMs = options.timeoutMs ?? FETCH_TIMEOUT_MS;
@@ -38,7 +47,7 @@ export async function fetchArticleHtml(
     visited.add(url.href);
     const response = await fetchImpl(url.href, {
       redirect: 'manual',
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: hopSignal(timeoutMs, options.deadline),
       headers: { accept: 'text/html,application/xhtml+xml', 'user-agent': HTML_UA },
     });
     if (response.status >= 300 && response.status < 400) {
@@ -99,7 +108,7 @@ async function readPrefixBytes(response: Response, maxBytes: number): Promise<{ 
   return { bytes: merged, truncated };
 }
 
-type ImageFetchOptions = { maxBytes?: number; timeoutMs?: number; fetchImpl?: typeof fetch };
+type ImageFetchOptions = { maxBytes?: number; timeoutMs?: number; fetchImpl?: typeof fetch; deadline?: AbortSignal };
 
 export async function fetchImageBytes(startUrl: URL, options: ImageFetchOptions = {}): Promise<FetchedImage> {
   const maxBytes = options.maxBytes ?? IMAGE_MAX_BYTES;
@@ -140,7 +149,7 @@ async function openImage(
     visited.add(url.href);
     const response = await fetchImpl(url.href, {
       redirect: 'manual',
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: hopSignal(timeoutMs, options.deadline),
       headers: { accept: 'image/jpeg,image/png,image/gif,image/webp', 'user-agent': HTML_UA },
     });
     if (response.status >= 300 && response.status < 400) {

@@ -152,7 +152,9 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
   // A finished composition stays exportable after a failed or cancelled refetch.
   // One fit for preview CSS, drag bounds and export: the template's own, unless "show whole photo".
   const photoFit = effectivePhotoFit(template.photoFit, card.showWholePhoto);
-  const needsUpload = template.requiresImage && card.image.kind !== 'local';
+  // Custom cards that need your own photo, or any photo card whose article photo failed to load.
+  const needsUpload =
+    (template.requiresImage && card.image.kind !== 'local') || (!!template.photo && card.image.kind === 'missing');
   const canExport = card.loadStatus !== 'loading' && card.title.trim() !== '' && !needsUpload && !headlineOverflow;
   const scale = useMemo(() => previewScale(previewWidth, Number.POSITIVE_INFINITY, template.canvas), [previewWidth, template.canvas]);
   // Computed after mount so SSR and first client render agree (avoids hydration mismatch).
@@ -264,14 +266,23 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
       }
       const data = payload.data;
       let nextRemote: string | undefined;
+      // The article itself loaded; a photo that then fails to download or decode must not
+      // throw away its headline, category and QR link. Keep them and mark the photo missing.
+      let photoFailed = false;
       if (data.imageUrl) {
-        const imageResponse = await fetch(data.imageUrl, { signal: controller.signal });
-        if (!imageResponse.ok) throw new Error(S.status.exportPhoto);
-        const blob = await imageResponse.blob();
-        if (blob.size > 8 * 1024 * 1024) throw new Error(S.status.tooBig);
-        nextRemote = URL.createObjectURL(blob);
-        try { await decodeImage(nextRemote); }
-        catch { URL.revokeObjectURL(nextRemote); throw new Error(S.status.exportPhoto); }
+        try {
+          const imageResponse = await fetch(data.imageUrl, { signal: controller.signal });
+          if (!imageResponse.ok) throw new Error('PHOTO_HTTP');
+          const blob = await imageResponse.blob();
+          if (blob.size > 8 * 1024 * 1024) throw new Error('PHOTO_TOO_BIG');
+          nextRemote = URL.createObjectURL(blob);
+          await decodeImage(nextRemote);
+        } catch (photoError) {
+          if (photoError instanceof DOMException && photoError.name === 'AbortError') throw photoError;
+          if (nextRemote) URL.revokeObjectURL(nextRemote);
+          nextRemote = undefined;
+          photoFailed = true;
+        }
       }
       if (seq !== requestSeq.current) {
         if (nextRemote) URL.revokeObjectURL(nextRemote);
@@ -284,9 +295,9 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
         URL.revokeObjectURL(localUrlRef.current);
         localUrlRef.current = undefined;
       }
-      const imageSrc = nextRemote ?? FALLBACK_IMAGE_SRC;
-      const imageKind = data.imageUrl ? ('remote' as const) : ('fallback' as const);
-      setLastRemoteImage({ src: imageSrc, kind: imageKind });
+      const imageSrc = photoFailed ? '' : (nextRemote ?? FALLBACK_IMAGE_SRC);
+      const imageKind = photoFailed ? ('missing' as const) : data.imageUrl ? ('remote' as const) : ('fallback' as const);
+      setLastRemoteImage(photoFailed ? null : { src: imageSrc, kind: imageKind as 'remote' | 'fallback' });
       dispatch({
         type: 'GENERATE_SUCCESS',
         articleUrl: data.canonicalUrl,
@@ -301,7 +312,9 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
         type: 'SET_FONT_SIZE',
         size: template.title.defaultFontSize,
       });
-      if (data.imageNotice === 'signing-unconfigured') {
+      if (photoFailed) {
+        announce('warning', S.status.photoFailed);
+      } else if (data.imageNotice === 'signing-unconfigured') {
         announce('warning', S.status.readySigningOff);
       } else if (!data.imageUrl) {
         announce('warning', S.status.readyDemo);
@@ -1096,7 +1109,7 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
                         height: template.photo.height,
                       }}
                     >
-                      <img
+                      {card.image.src && <img
                         className="photo"
                         src={card.image.src}
                         alt=""
@@ -1111,7 +1124,7 @@ export default function PhotocardEditor({ imageSigningReady = true }: { imageSig
                           objectFit: photoFit,
                           transform: `translate(${card.photoPosition.x}px, ${card.photoPosition.y}px) scale(${card.imageScale})`,
                         }}
-                      />
+                      />}
                     </div>
                   </DraggableLayer>
                 )}

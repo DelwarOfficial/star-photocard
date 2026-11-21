@@ -1,7 +1,12 @@
 import { defaultTemplate, type Language, type Point, type TemplateDefinition } from '../../config/templates';
 import { todayBanglaDate } from '../text/dates';
 
-export type ImageKind = 'fallback' | 'remote' | 'local';
+/**
+ * 'missing': the article loaded but its photo could not be downloaded or decoded. The card
+ * keeps the article text with an empty photo window, and export stays blocked until the
+ * user uploads a photo (a news card must never silently carry the wrong photo).
+ */
+export type ImageKind = 'fallback' | 'remote' | 'local' | 'missing';
 
 /** Uploaded ad creative: a browser-only object URL plus its intrinsic size (for the fit math). */
 export type AdImage = Readonly<{ src: string; width: number; height: number }>;

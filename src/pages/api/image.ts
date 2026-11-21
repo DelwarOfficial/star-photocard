@@ -57,7 +57,7 @@ export async function handleImage(request: Request, workerEnv: Record<string, un
   }
   if (imageUrl.protocol !== 'https:') return failure(403, 'Invalid image reference.');
   if (imageUrl.username || imageUrl.password) return failure(403, 'Invalid image reference.');
-  if (!isStarNewsHost(imageUrl.hostname)) return failure(403, 'Invalid image reference.');
+  if (!isStarNewsHost(imageUrl.hostname) || imageUrl.port !== '') return failure(403, 'Invalid image reference.');
 
   try {
     const cacheKey = await hashedImageCacheKey(imageUrl.href, new URL(request.url).origin);

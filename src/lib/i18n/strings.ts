@@ -95,6 +95,7 @@ export const S = {
       local: 'your file (this browser only)',
       remote: 'article photo',
       fallback: 'demo photo',
+      missing: 'none — the article photo couldn’t be loaded',
     },
   },
   headline: {
@@ -198,6 +199,8 @@ export const S = {
     fetching: 'Fetching the article… You can cancel without losing your work.',
     loadFailed: 'We couldn’t load that article.',
     readyDemo: 'Card ready — no image found, so we’re using the demo photo.',
+    photoFailed:
+      'Article loaded, but we couldn’t load the card photo (article photo links expire after 10 minutes). Upload your own photo or click Generate again.',
     readySigningOff:
       'Card ready with the demo photo — the article has a photo, but the server isn’t set up to serve it (IMAGE_TOKEN_SECRET is missing).',
     ready: 'Card ready — copy or download it.',
