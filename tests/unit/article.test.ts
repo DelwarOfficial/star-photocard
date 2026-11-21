@@ -7,6 +7,7 @@ import {
   extractCategory,
   urlSectionCategory,
   extractImageCandidates,
+  isShareImage,
   getBestSrcsetUrl,
   normalizeImageUrl,
 } from '../../src/lib/article/extractArticle';
@@ -114,6 +115,32 @@ describe('article extraction', () => {
     expect(candidates.slice(0, 2)).toEqual(['https://www.starnews.com.bd/a.jpg', 'https://www.starnews.com.bd/secure.jpg']);
     expect(candidates).toContain('https://www.starnews.com.bd/relative.jpg');
     expect(new Set(candidates).size).toBe(candidates.length);
+  });
+
+  it('prefers the clean hero photo over the branded Star News /share-image/ card', () => {
+    // Real page shape (Nov 2026): og/twitter/JSON-LD all point at the 1200 × 630 logo-badged
+    // share card; the clean 1280 × 720 photo is the article's <img fetchpriority="high">.
+    const share = 'https://starnews.com.bd/share-image/29404/449a3ec988';
+    const hero = 'https://starnews.com.bd/storage/media/general/69c69e73b5217.webp';
+    const html = [
+      `<meta property="og:image" content="${share}">`,
+      `<meta property="og:image:secure_url" content="${share}">`,
+      `<meta name="twitter:image" content="${share}">`,
+      `<script type="application/ld+json">{"@type":"NewsArticle","image":{"@type":"ImageObject","url":"${share}"}}</script>`,
+      '<img class="site-mobile-logo uc-logo-img" src="https://starnews.com.bd/image/new_logo.png" alt="star news logo">',
+      `<img loading="eager" fetchpriority="high" decoding="async" class="image uc-transition-scale-up" src="${hero}" alt="">`,
+    ].join('');
+    const candidates = extractImageCandidates(html, 'https://starnews.com.bd/country/29404/x.html');
+    expect(candidates[0]).toBe(hero);
+    expect(candidates.at(-1)).toBe(share);
+    expect(candidates).not.toContain('https://starnews.com.bd/image/new_logo.png');
+  });
+
+  it('still falls back to the share card when a page has no other photo', () => {
+    const share = 'https://starnews.com.bd/share-image/1/abc';
+    expect(extractImageCandidates(`<meta property="og:image" content="${share}">`, 'https://starnews.com.bd/a')).toEqual([share]);
+    expect(isShareImage(share)).toBe(true);
+    expect(isShareImage('https://starnews.com.bd/storage/media/general/x.webp')).toBe(false);
   });
 
   it('rejects non-Star News and non-https image URLs', () => {

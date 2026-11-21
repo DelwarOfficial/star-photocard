@@ -79,7 +79,8 @@ export async function handleArticle(request: Request, clientAddress: string | un
     const cacheKey = await hashedArticleCacheKey(startUrl.href, new URL(request.url).origin);
     let cache: Cache | undefined;
     try {
-      cache = await caches.open('star-photocard-article-v3');
+      // v4: image choice now skips Star News' branded /share-image/ cards; drop v3 entries.
+      cache = await caches.open('star-photocard-article-v4');
       const hit = await matchCache(cache, cacheKey);
       if (hit) {
         const payload = (await hit.json()) as { data?: Record<string, unknown> };

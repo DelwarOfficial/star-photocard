@@ -262,8 +262,25 @@ function firstJsonLdArticleSection(html: string): string | null {
 
 // --- Images ---
 
+/**
+ * Star News' og:image / twitter:image / JSON-LD image now point at a generated social card
+ * (/share-image/<id>/<hash>): the photo cropped to 1200 × 630 with a "star news" logo badge
+ * baked into the corner. It is only a last resort; the clean article photo comes first.
+ */
+const SHARE_IMAGE_PATH = /^\/share-image\//u;
+
+export function isShareImage(imageUrl: string): boolean {
+  try {
+    return SHARE_IMAGE_PATH.test(new URL(imageUrl).pathname);
+  } catch {
+    return false;
+  }
+}
+
 export function extractImageCandidates(html: string, articleUrl: string): string[] {
   const ordered: string[] = [];
+  // 0. The article's hero photo: the one <img fetchpriority="high"> (clean original, 1280 × 720).
+  for (const value of extractHeroImages(html)) ordered.push(value);
   // 1-4. Meta images: og:image first (Star News' secure_url can lag behind it), then secure_url, twitter.
   for (const key of ['og:image', 'og:image:secure_url', 'twitter:image', 'twitter:image:src']) {
     for (const value of allMetaContents(html, key)) ordered.push(value);
@@ -286,7 +303,25 @@ export function extractImageCandidates(html: string, articleUrl: string): string
     seen.add(normalized);
     result.push(normalized);
   }
-  return result;
+  // Branded share cards go last (stable order otherwise), so any clean photo wins.
+  return [...result.filter((u) => !isShareImage(u)), ...result.filter(isShareImage)];
+}
+
+/** The article hero: the first <img fetchpriority="high"> that is not a logo. */
+function extractHeroImages(html: string): string[] {
+  const imgPattern = /<img\b(?:"[^"]*"|'[^']*'|[^'">])*>/giu;
+  let match: RegExpExecArray | null;
+  while ((match = imgPattern.exec(html)) !== null) {
+    const tag = match[0];
+    if ((attr(tag, 'fetchpriority') ?? '').toLowerCase() !== 'high') continue;
+    const src = attr(tag, 'src') ?? '';
+    if (/logo/iu.test(src) || /logo/iu.test(attr(tag, 'class') ?? '')) continue;
+    const out = [src];
+    const srcset = attr(tag, 'srcset');
+    if (srcset) out.unshift(getBestSrcsetUrl(srcset));
+    return out.filter(Boolean);
+  }
+  return [];
 }
 
 export function normalizeImageUrl(imageUrl: unknown, articleUrl: string): string {
@@ -420,6 +455,8 @@ function extractArticleMarkupImages(html: string): string[] {
     imgPattern.lastIndex = 0;
     while ((match = imgPattern.exec(scope)) !== null) {
       const tag = match[0];
+      // Site logos are never the article photo (the whole-page fallback would otherwise pick them).
+      if (/logo/iu.test(attr(tag, 'src') ?? '') || /logo/iu.test(attr(tag, 'class') ?? '')) continue;
       // For post_template-0 legacy takes //img[1] (first img); overlay takes all.
       if (firstOnly && out.length > 0) break;
       for (const attribute of ['src', 'data-src', 'data-lazy-src', 'data-original']) {
